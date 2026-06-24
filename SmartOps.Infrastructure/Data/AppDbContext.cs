@@ -18,6 +18,11 @@ public class AppDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.Entity<Transaction>()
+            .HasOne<Customer>()
+            .WithMany()
+            .HasForeignKey(t => t.CustomerId);
+
         modelBuilder.Entity<Customer>().HasData(
             new Customer
             {
