@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -6,13 +7,33 @@ using Xunit;
 
 namespace SmartOps.Web.Tests;
 
-public class DatabaseStartupTests : IClassFixture<WebApplicationFactory<Program>>
+public class DatabaseStartupTests : IAsyncLifetime
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly string _contentRoot;
+    private WebApplicationFactory<Program> _factory = null!;
 
-    public DatabaseStartupTests(WebApplicationFactory<Program> factory)
+    public DatabaseStartupTests()
     {
-        _factory = factory;
+        // Unique per-run directory eliminates any cross-run false positives.
+        _contentRoot = Path.Combine(
+            Path.GetDirectoryName(typeof(DatabaseStartupTests).Assembly.Location)!,
+            "test-runs",
+            Guid.NewGuid().ToString("N"));
+    }
+
+    public Task InitializeAsync()
+    {
+        Directory.CreateDirectory(_contentRoot);
+        _factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(b => b.UseContentRoot(_contentRoot));
+        return Task.CompletedTask;
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _factory.DisposeAsync();
+        if (Directory.Exists(_contentRoot))
+            Directory.Delete(_contentRoot, recursive: true);
     }
 
     [Fact]
@@ -27,8 +48,8 @@ public class DatabaseStartupTests : IClassFixture<WebApplicationFactory<Program>
         using var scope = _factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        // The SQLite file should exist on disk after EnsureCreated / Migrate
-        var dbPath = Path.Combine(AppContext.BaseDirectory, "smartops.db");
+        // The SQLite file must exist in this run's unique content root — never a leftover.
+        var dbPath = Path.Combine(_contentRoot, "smartops.db");
         Assert.True(File.Exists(dbPath), $"Expected smartops.db at {dbPath}");
 
         // Seed data must be present
