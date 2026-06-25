@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartOps.Infrastructure.Data;
 using Xunit;
@@ -24,8 +25,26 @@ public class DatabaseStartupTests : IAsyncLifetime
     public Task InitializeAsync()
     {
         Directory.CreateDirectory(_contentRoot);
+
+        var dbPath = Path.Combine(_contentRoot, "smartops.db");
+
         _factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(b => b.UseContentRoot(_contentRoot));
+            .WithWebHostBuilder(b =>
+            {
+                b.UseContentRoot(_contentRoot);
+
+                // Supply configuration explicitly so the test is not coupled to
+                // appsettings.json in the real content root.  The connection string
+                // points to the unique per-run directory, ensuring no cross-run state.
+                b.ConfigureAppConfiguration((_, cfg) =>
+                {
+                    cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["ConnectionStrings:DefaultConnection"] =
+                            $"Data Source={dbPath}"
+                    });
+                });
+            });
         return Task.CompletedTask;
     }
 
