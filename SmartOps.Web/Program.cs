@@ -1,3 +1,6 @@
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using SmartOps.Infrastructure.Data;
 using SmartOps.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -6,7 +9,30 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Read connection string from the finalized IConfiguration (which includes
+// any overrides added by WebApplicationFactory.ConfigureAppConfiguration).
+builder.Services.AddDbContext<AppDbContext>((sp, options) =>
+{
+    var config = sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
+    var connectionString = config.GetConnectionString("DefaultConnection")
+        ?? throw new InvalidOperationException(
+            "Connection string 'DefaultConnection' is not configured. " +
+            "Add it to appsettings.json or environment variables.");
+    options.UseSqlite(connectionString);
+});
+
 var app = builder.Build();
+
+// Ensure the database schema exists on startup
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+}
+
+// Release pooled SQLite connections when the app stops so callers
+// (including integration tests) can safely delete the database file.
+app.Lifetime.ApplicationStopping.Register(SqliteConnection.ClearAllPools);
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
