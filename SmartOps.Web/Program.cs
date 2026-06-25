@@ -34,6 +34,17 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
         connectionString = csb.ToString();
     }
 
+    if (!string.IsNullOrEmpty(csb.DataSource)
+        && csb.DataSource != ":memory:"
+        && !csb.DataSource.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+    {
+        var directoryPath = Path.GetDirectoryName(csb.DataSource);
+        if (!string.IsNullOrEmpty(directoryPath))
+        {
+            Directory.CreateDirectory(directoryPath);
+        }
+    }
+
     options.UseSqlite(connectionString);
 });
 
