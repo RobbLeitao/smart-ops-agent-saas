@@ -26,3 +26,6 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+
+// Expose Program to the integration test project
+public partial class Program { }

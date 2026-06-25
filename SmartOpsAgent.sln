@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartOps.Core", "SmartOps.C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartOps.Infrastructure", "SmartOps.Infrastructure\SmartOps.Infrastructure.csproj", "{0C13685E-7F8A-419E-9E16-4625D019BF52}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartOps.Web.Tests", "SmartOps.Web.Tests\SmartOps.Web.Tests.csproj", "{26E2E694-60DE-4EC4-A56E-B199094FC4A1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{0C13685E-7F8A-419E-9E16-4625D019BF52}.Release|x64.Build.0 = Release|Any CPU
 		{0C13685E-7F8A-419E-9E16-4625D019BF52}.Release|x86.ActiveCfg = Release|Any CPU
 		{0C13685E-7F8A-419E-9E16-4625D019BF52}.Release|x86.Build.0 = Release|Any CPU
+		{26E2E694-60DE-4EC4-A56E-B199094FC4A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{26E2E694-60DE-4EC4-A56E-B199094FC4A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{26E2E694-60DE-4EC4-A56E-B199094FC4A1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{26E2E694-60DE-4EC4-A56E-B199094FC4A1}.Debug|x64.Build.0 = Debug|Any CPU
+		{26E2E694-60DE-4EC4-A56E-B199094FC4A1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{26E2E694-60DE-4EC4-A56E-B199094FC4A1}.Debug|x86.Build.0 = Debug|Any CPU
+		{26E2E694-60DE-4EC4-A56E-B199094FC4A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{26E2E694-60DE-4EC4-A56E-B199094FC4A1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{26E2E694-60DE-4EC4-A56E-B199094FC4A1}.Release|x64.ActiveCfg = Release|Any CPU
+		{26E2E694-60DE-4EC4-A56E-B199094FC4A1}.Release|x64.Build.0 = Release|Any CPU
+		{26E2E694-60DE-4EC4-A56E-B199094FC4A1}.Release|x86.ActiveCfg = Release|Any CPU
+		{26E2E694-60DE-4EC4-A56E-B199094FC4A1}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
