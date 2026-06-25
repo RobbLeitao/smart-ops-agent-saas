@@ -19,11 +19,15 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
             "Connection string 'DefaultConnection' is not configured. " +
             "Add it to appsettings.json or environment variables.");
 
-    // If the SQLite data source is a relative path, anchor it to the content root
+    // If the SQLite data source is a plain relative path, anchor it to the content root
     // so the database file is always created in the app's intended location,
     // regardless of the caller's working directory.
+    // SQLite special data sources (:memory:, file: URIs) are left unchanged.
     var csb = new SqliteConnectionStringBuilder(connectionString);
-    if (!string.IsNullOrEmpty(csb.DataSource) && !Path.IsPathRooted(csb.DataSource))
+    if (!string.IsNullOrEmpty(csb.DataSource)
+        && !Path.IsPathRooted(csb.DataSource)
+        && csb.DataSource != ":memory:"
+        && !csb.DataSource.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
     {
         var env = sp.GetRequiredService<IWebHostEnvironment>();
         csb.DataSource = Path.Combine(env.ContentRootPath, csb.DataSource);
