@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using SmartOps.Web.Plugins;
 using Xunit;
 
@@ -11,11 +12,12 @@ public sealed class DataOpsPluginTests
     [Fact]
     public async Task GetFailedTransactionsAsync_ReturnsFormattedStripeFailures()
     {
-        using var factory = new WebApplicationFactory<Program>();
-        using var scope = factory.Services.CreateScope();
+        // Create an isolated in-memory AppDbContext for the unit test to avoid DI/provider conflicts
+        var options = new DbContextOptionsBuilder<SmartOps.Infrastructure.Data.AppDbContext>()
+            .UseInMemoryDatabase("DataOpsPluginDb" + Guid.NewGuid())
+            .Options;
 
-        var db = scope.ServiceProvider.GetRequiredService<SmartOps.Infrastructure.Data.AppDbContext>();
-        // Ensure database is deleted and recreated to pick up model changes and seed data
+        using var db = new SmartOps.Infrastructure.Data.AppDbContext(options);
         db.Database.EnsureDeleted();
         db.Database.EnsureCreated();
 
