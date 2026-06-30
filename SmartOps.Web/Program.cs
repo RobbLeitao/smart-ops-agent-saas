@@ -2,8 +2,17 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using SmartOps.Infrastructure.Data;
 using SmartOps.Web.Components;
+using Microsoft.SemanticKernel;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Register a default Kernel and the AIOpsService so integration tests and app code can resolve them.
+// Kernel registration is intentionally minimal; real deployments should configure providers (OpenAI, etc.) as needed.
+var skBuilder = Kernel.CreateBuilder();
+// Allow tests or app code to customize the builder services if needed. For now register the kernel constructed from the builder.
+var kernel = skBuilder.Build();
+builder.Services.AddSingleton(kernel);
+builder.Services.AddScoped<SmartOps.Web.Services.AIOpsService>();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
