@@ -75,6 +75,12 @@ builder.Services.AddSingleton<Kernel>(sp =>
         var modelId = Environment.GetEnvironmentVariable("OPENAI_MODEL_ID") ?? "gpt-4o";
         kb.AddOpenAIChatCompletion(Environment.GetEnvironmentVariable("OPENAI_API_KEY")!, null, modelId);
     }
+    else
+    {
+        // No OpenAI key configured: register a development fake IChatCompletionService so the Kernel can execute in dev mode.
+        // This allows the interactive UI to call the orchestrator without external credentials.
+        builder.Services.AddSingleton<Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService, SmartOps.Web.Services.DevFakeChatCompletionService>();
+    }
 
     try
     {

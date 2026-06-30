@@ -48,6 +48,10 @@ else
                                 <span>Analizar con IA</span>
                             }
                         </button>
+                        @if (isAnalyzing)
+                        {
+                            <div class="ms-2 text-muted" style="display:inline-block">Analizando transacción...</div>
+                        }
                     </td>
                 </tr>
                 if (diagnostics.TryGetValue(t.Id, out var md) && !string.IsNullOrWhiteSpace(md))
@@ -71,6 +75,7 @@ else
     private List<Transaction>? failedTransactions;
     private Dictionary<int, bool> processing = new();
     private Dictionary<int, string> diagnostics = new();
+    private bool isAnalyzing = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -87,6 +92,9 @@ else
 
         try
         {
+            isAnalyzing = true;
+            StateHasChanged();
+
             // Resolve the transaction and attempt to obtain a GUID to pass to the orchestrator.
             var tx = await Db.Transactions.FindAsync(id);
             Guid txGuid;
@@ -110,6 +118,7 @@ else
         }
         finally
         {
+            isAnalyzing = false;
             processing[id] = false;
             StateHasChanged();
         }
