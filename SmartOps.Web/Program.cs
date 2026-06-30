@@ -127,10 +127,11 @@ builder.Services.AddSingleton<Kernel>(sp =>
     return builtKernel;
 });
 
-// Register AIOpsService and plugin in DI
+// Register AIOpsService, DiagnosticOrchestratorService and plugin in DI
 builder.Services.AddScoped<SmartOps.Web.Services.AIOpsService>();
 builder.Services.AddScoped<SmartOps.Web.Services.IAIOpsService>(sp => sp.GetRequiredService<SmartOps.Web.Services.AIOpsService>());
 builder.Services.AddScoped<DataOpsPlugin>();
+builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticOrchestratorService>();
 
 // Proceed with building the app further below...
 
@@ -206,6 +207,19 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+// Diagnostics endpoint
+app.MapGet("/api/diagnostics/{transactionId}", async (Guid transactionId, SmartOps.Web.Services.DiagnosticOrchestratorService orchestrator) =>
+{
+    var result = await orchestrator.RunDiagnosticAsync(transactionId);
+
+    if (string.IsNullOrWhiteSpace(result) || result.Contains("NotFound", StringComparison.OrdinalIgnoreCase) || result.Contains("No failed", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.NotFound();
+    }
+
+    return Results.Content(result, "text/markdown");
+});
 
 app.Run();
 
