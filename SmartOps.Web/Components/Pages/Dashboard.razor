@@ -132,7 +132,16 @@
                 if (toAdd.Count > 0)
                 {
                     foreach (var s in toAdd) Db.Transactions.Add(s);
-                    try { await Db.SaveChangesAsync(); } catch { }
+                    try
+                    {
+                        await Db.SaveChangesAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        // Surface seeding errors to the console for diagnostics during development
+                        Console.Error.WriteLine($"Failed to seed transactions: {ex}");
+                        throw;
+                    }
                 }
 
         failedTransactions = await Db.Transactions.Where(t => t.Status == "Failed").OrderByDescending(t => t.OccurredAt).ToListAsync();
