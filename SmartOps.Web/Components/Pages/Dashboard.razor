@@ -125,7 +125,7 @@
                     var amt = 10m + (seedIndex * 5);
                     var currency = (seedIndex % 2 == 0) ? "USD" : "EUR";
                     var err = sampleErrors[seedIndex % sampleErrors.Length];
-                    toAdd.Add(new SmartOps.Core.Entities.Transaction { Amount = Math.Round(amt,2), Currency = currency, ErrorMessage = err, Status = "Failed", OccurredAt = now.AddMinutes(-(seedIndex+1)*15) });
+                    toAdd.Add(new SmartOps.Core.Entities.Transaction { CustomerId = 1, Amount = Math.Round(amt,2), Currency = currency, ErrorMessage = err, Status = "Failed", OccurredAt = now.AddMinutes(-(seedIndex+1)*15) });
                     seedIndex++;
                 }
 
