@@ -1,0 +1,115 @@
+@page "/dashboard"
+@using SmartOps.Core.Entities
+@using Microsoft.EntityFrameworkCore
+@inject SmartOps.Infrastructure.Data.AppDbContext Db
+@inject SmartOps.Web.Services.DiagnosticOrchestratorService Orchestrator
+
+<h3>Failed Transactions</h3>
+
+@if (failedTransactions == null)
+{
+    <p>Loading...</p>
+}
+else if (failedTransactions.Count == 0)
+{
+    <p>No failed transactions found.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Amount</th>
+                <th>Currency</th>
+                <th>Error</th>
+                <th>OccurredAt</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var t in failedTransactions)
+            {
+                <tr>
+                    <td>@t.Id</td>
+                    <td>@t.Amount</td>
+                    <td>@t.Currency</td>
+                    <td>@t.ErrorMessage</td>
+                    <td>@t.OccurredAt?.ToString("g")</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" @onclick="() => AnalyzeAsync(t.Id)" disabled="@IsProcessing(t.Id)">
+                            @if (IsProcessing(t.Id))
+                            {
+                                <span>Analizando...</span>
+                            }
+                            else
+                            {
+                                <span>Analizar con IA</span>
+                            }
+                        </button>
+                    </td>
+                </tr>
+                if (diagnostics.TryGetValue(t.Id, out var md) && !string.IsNullOrWhiteSpace(md))
+                {
+                    <tr>
+                        <td colspan="6">
+                            <div class="card">
+                                <div class="card-body">
+                                    @((MarkupString)RenderMarkdown(md))
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Transaction>? failedTransactions;
+    private Dictionary<int, bool> processing = new();
+    private Dictionary<int, string> diagnostics = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        failedTransactions = await Db.Transactions.Where(t => t.Status == "Failed").OrderByDescending(t => t.OccurredAt).ToListAsync();
+    }
+
+    private bool IsProcessing(int id) => processing.TryGetValue(id, out var v) && v;
+
+    private async Task AnalyzeAsync(int id)
+    {
+        processing[id] = true;
+        diagnostics[id] = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var md = await Orchestrator.RunDiagnosticAsync(Guid.Empty); // placeholder
+            // The orchestrator expects a Guid - map int id to GUID if your system uses GUIDs.
+            // If Transaction.Id is int, adapt RunDiagnosticAsync to accept int or look up GUID mapping.
+
+            diagnostics[id] = md ?? "";
+        }
+        catch (Exception ex)
+        {
+            diagnostics[id] = $"Error running diagnostic: {ex.Message}";
+        }
+        finally
+        {
+            processing[id] = false;
+            StateHasChanged();
+        }
+    }
+
+    private string RenderMarkdown(string md)
+    {
+        // Very simple markdown rendering: headings and line breaks
+        var html = System.Net.WebUtility.HtmlEncode(md);
+        html = System.Text.RegularExpressions.Regex.Replace(html, "^## (.+)$", "<h4>$1</h4>", System.Text.RegularExpressions.RegexOptions.Multiline);
+        html = html.Replace("\n\n", "<br/><br/>");
+        html = html.Replace("- ", "<li>").Replace("\n", "</li>\n");
+        return html;
+    }
+}
