@@ -79,15 +79,6 @@
                                                     <span>Analizar con IA</span>
                                                 }
                                             </button>
-                                                @if (IsProcessing(t.Id))
-                                                {
-                                                    <span>Analizando...</span>
-                                                }
-                                                else
-                                                {
-                                                    <span>Analizar con IA</span>
-                                                }
-                                            </button>
                                         </td>
                                     </tr>
 
@@ -121,30 +112,26 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Ensure sample failed transactions exist for UI/demo
-        var existing = await Db.Transactions.Where(t => t.Status == "Failed").ToListAsync();
-        if (existing == null || existing.Count < 3)
-        {
-                    // If only 0 or 1 existing, ensure at least 3 unique sample records are present
-                    var now = DateTime.UtcNow;
-                    var samplesToAdd = new List<SmartOps.Core.Entities.Transaction>();
-                    if (existing == null || existing.Count == 0)
-                    {
-                        samplesToAdd.Add(new SmartOps.Core.Entities.Transaction { Amount = 49.00m, Currency = "USD", ErrorMessage = "Card declined", Status = "Failed", OccurredAt = now.AddMinutes(-30) });
-                        samplesToAdd.Add(new SmartOps.Core.Entities.Transaction { Amount = 120.00m, Currency = "EUR", ErrorMessage = "Expired card", Status = "Failed", OccurredAt = now.AddHours(-2) });
-                        samplesToAdd.Add(new SmartOps.Core.Entities.Transaction { Amount = 15.50m, Currency = "USD", ErrorMessage = "Insufficient funds", Status = "Failed", OccurredAt = now.AddDays(-1) });
-                    }
-                    else if (existing.Count == 1)
-                    {
-                        // Add two more to reach minimum 3
-                        samplesToAdd.Add(new SmartOps.Core.Entities.Transaction { Amount = 120.00m, Currency = "EUR", ErrorMessage = "Expired card", Status = "Failed", OccurredAt = now.AddHours(-2) });
-                        samplesToAdd.Add(new SmartOps.Core.Entities.Transaction { Amount = 15.50m, Currency = "USD", ErrorMessage = "Insufficient funds", Status = "Failed", OccurredAt = now.AddDays(-1) });
-                    }
+                // Ensure sample failed transactions exist for UI/demo
+                var existing = await Db.Transactions.Where(t => t.Status == "Failed").ToListAsync();
+                var now = DateTime.UtcNow;
+                const int target = 8; // ensure more volume
+                if (existing == null) existing = new List<SmartOps.Core.Entities.Transaction>();
+                var toAdd = new List<SmartOps.Core.Entities.Transaction>();
+                var sampleErrors = new[] { "Card declined", "Expired card", "Insufficient funds", "Processing error", "Suspected fraud", "Invalid CVC" };
+                int seedIndex = 0;
+                while (existing.Count + toAdd.Count < target)
+                {
+                    var amt = 10m + (seedIndex * 5);
+                    var currency = (seedIndex % 2 == 0) ? "USD" : "EUR";
+                    var err = sampleErrors[seedIndex % sampleErrors.Length];
+                    toAdd.Add(new SmartOps.Core.Entities.Transaction { Amount = Math.Round(amt,2), Currency = currency, ErrorMessage = err, Status = "Failed", OccurredAt = now.AddMinutes(-(seedIndex+1)*15) });
+                    seedIndex++;
+                }
 
-                    foreach (var s in samplesToAdd)
-                    {
-                        try { Db.Transactions.Add(s); } catch { }
-                    }
+                if (toAdd.Count > 0)
+                {
+                    foreach (var s in toAdd) Db.Transactions.Add(s);
                     try { await Db.SaveChangesAsync(); } catch { }
                 }
 
