@@ -112,6 +112,25 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Ensure sample failed transactions exist for UI/demo
+        var existing = await Db.Transactions.Where(t => t.Status == "Failed").ToListAsync();
+        if (existing == null || existing.Count < 3)
+        {
+            var now = DateTime.UtcNow;
+            var samples = new[]
+            {
+                new SmartOps.Core.Entities.Transaction { Id = 2, Amount = 49.00m, Currency = "USD", ErrorMessage = "Card declined", Status = "Failed", OccurredAt = now.AddMinutes(-30) },
+                new SmartOps.Core.Entities.Transaction { Id = 3, Amount = 120.00m, Currency = "EUR", ErrorMessage = "Expired card", Status = "Failed", OccurredAt = now.AddHours(-2) },
+                new SmartOps.Core.Entities.Transaction { Id = 4, Amount = 15.50m, Currency = "USD", ErrorMessage = "Insufficient funds", Status = "Failed", OccurredAt = now.AddDays(-1) }
+            };
+
+            foreach (var s in samples)
+            {
+                try { Db.Transactions.Add(s); } catch { }
+            }
+            try { await Db.SaveChangesAsync(); } catch { }
+        }
+
         failedTransactions = await Db.Transactions.Where(t => t.Status == "Failed").OrderByDescending(t => t.OccurredAt).ToListAsync();
     }
 
@@ -127,6 +146,9 @@
         {
             isAnalyzing = true;
             StateHasChanged();
+
+            // Simulate realistic delay so spinner is visible in UI tests
+            await Task.Delay(2500);
 
             // Resolve the transaction and attempt to obtain a GUID to pass to the orchestrator.
             var tx = await Db.Transactions.FindAsync(id);
