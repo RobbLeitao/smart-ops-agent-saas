@@ -50,13 +50,33 @@ namespace SmartOps.Web.Tests
 
             var txId = Guid.NewGuid();
 
-            var response = await client.PostAsync($"/api/diagnostics/{txId}", null);
+            // Prepare a Stripe-like JSON payload with transactionId in data.object.metadata.transactionId
+            var payload = new
+            {
+                type = "charge.failed",
+                data = new
+                {
+                    @object = new
+                    {
+                        id = "evt_123",
+                        metadata = new
+                        {
+                            transactionId = txId.ToString()
+                        }
+                    }
+                }
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(payload);
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+            var response = await client.PostAsync($"/api/webhooks/stripe", content);
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal("text/markdown", response.Content.Headers.ContentType?.MediaType);
 
-            var content = await response.Content.ReadAsStringAsync();
-            Assert.Contains("## 🔍 Resumen del Error", content);
+            var responseBody = await response.Content.ReadAsStringAsync();
+            Assert.Contains("## 🔍 Resumen del Error", responseBody);
         }
     }
 }

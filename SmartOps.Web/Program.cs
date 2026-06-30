@@ -217,10 +217,60 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-// Diagnostics endpoint (POST to accept webhook-style requests)
-app.MapPost("/api/diagnostics/{transactionId}", async (Guid transactionId, SmartOps.Web.Services.DiagnosticOrchestratorService orchestrator) =>
+// Stripe webhook receiver
+app.MapPost("/api/webhooks/stripe/{transactionId?}", async (HttpRequest req, string? transactionId, SmartOps.Web.Services.DiagnosticOrchestratorService orchestrator) =>
 {
-    var result = await orchestrator.RunDiagnosticAsync(transactionId);
+    Guid? txId = null;
+
+    // Prefer transactionId from URL if present
+    if (!string.IsNullOrWhiteSpace(transactionId) && Guid.TryParse(transactionId, out var parsed))
+    {
+        txId = parsed;
+    }
+    else
+    {
+        // Try to parse JSON body for known Stripe-like structure
+        try
+        {
+            using var sr = new StreamReader(req.Body);
+            var body = await sr.ReadToEndAsync();
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(body);
+                    // Common places: data.object.metadata.transactionId or data.object.id
+                    if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    {
+                        if (data.TryGetProperty("object", out var obj) && obj.ValueKind == System.Text.Json.JsonValueKind.Object)
+                        {
+                            if (obj.TryGetProperty("metadata", out var meta) && meta.ValueKind == System.Text.Json.JsonValueKind.Object)
+                            {
+                                if (meta.TryGetProperty("transactionId", out var txEl) && txEl.ValueKind == System.Text.Json.JsonValueKind.String && Guid.TryParse(txEl.GetString(), out var idFromMeta))
+                                {
+                                    txId = idFromMeta;
+                                }
+                            }
+
+                            // Fallback: try object.id if it looks like a guid
+                            if (txId == null && obj.TryGetProperty("id", out var objId) && objId.ValueKind == System.Text.Json.JsonValueKind.String && Guid.TryParse(objId.GetString(), out var idFromObj))
+                            {
+                                txId = idFromObj;
+                            }
+                        }
+                    }
+            }
+        }
+        catch
+        {
+            // ignore parse errors
+        }
+    }
+
+    if (txId == null)
+    {
+        return Results.BadRequest("transactionId not provided in URL or request body");
+    }
+
+    var result = await orchestrator.RunDiagnosticAsync(txId.Value);
 
     if (string.IsNullOrWhiteSpace(result) || result.Contains("NotFound", StringComparison.OrdinalIgnoreCase) || result.Contains("No failed", StringComparison.OrdinalIgnoreCase))
     {
