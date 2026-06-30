@@ -36,6 +36,10 @@ namespace SmartOps.Web.Tests
                         // Override IAIOpsService with fake
                         services.AddScoped<SmartOps.Web.Services.IAIOpsService, FakeAIOpsService>();
 
+                        // Remove existing AppDbContext registrations (Sqlite) so we can replace with InMemory for tests
+                        var descriptors = services.Where(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>) || d.ServiceType == typeof(AppDbContext)).ToList();
+                        foreach (var d in descriptors) services.Remove(d);
+
                         // Use in-memory DB for testing
                         services.AddDbContext<AppDbContext>(options =>
                             options.UseInMemoryDatabase("DiagnosticsEndpointDb" + Guid.NewGuid()));
