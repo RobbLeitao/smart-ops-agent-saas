@@ -8,4 +8,9 @@ public class Transaction
     public string Currency { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string GatewayReference { get; set; } = string.Empty;
+
+    // New fields for provider, error message and occurrence timestamp
+    public string Provider { get; set; } = string.Empty;
+    public string? ErrorMessage { get; set; }
+    public DateTime? OccurredAt { get; set; }
 }
