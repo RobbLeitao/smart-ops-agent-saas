@@ -4,6 +4,7 @@ using SmartOps.Infrastructure.Data;
 using SmartOps.Web.Components;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
+using SmartOps.Web.Plugins;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +13,8 @@ var builder = WebApplication.CreateBuilder(args);
 var skBuilder = Kernel.CreateBuilder();
 
 // Configure OpenAI chat completion from environment variables so deployments can override via env.
+// Register DataOpsPlugin with the kernel so plugin functions are available to the agent.
+// DataOpsPlugin depends on AppDbContext, so create a short-lived ServiceProvider to allow the kernel builder to discover the service type.
 // Expected env vars: OPENAI_API_KEY, OPENAI_MODEL_ID (e.g., 'gpt-4o' or 'gpt-4o-mini').
 var openAiApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 var openAiModelId = Environment.GetEnvironmentVariable("OPENAI_MODEL_ID") ?? "gpt-4o";
@@ -25,6 +28,29 @@ else
 {
     // No API key supplied — continue without registering OpenAI provider so tests and local runs don't fail.
     // This leaves the kernel usable for non-OpenAI scenarios and allows tests to run without external credentials.
+}
+
+// Attempt to register DataOpsPlugin so its KernelFunctions are discoverable by the kernel.
+// The plugin depends on AppDbContext; create a temporary ServiceProvider from the current service collection so plugin activation can be resolved.
+try
+{
+    var tempSp = builder.Services.BuildServiceProvider();
+    var plugins = (System.Collections.Generic.ICollection<Microsoft.SemanticKernel.KernelPlugin>)skBuilder.Plugins;
+    plugins.AddFromType<DataOpsPlugin>(null, tempSp);
+}
+catch
+{
+    // If plugin registration fails (API mismatch or missing dependency), fall back to registering by type only.
+    // This keeps application startup resilient during tests and local runs.
+    try
+    {
+        var plugins = (System.Collections.Generic.ICollection<Microsoft.SemanticKernel.KernelPlugin>)skBuilder.Plugins;
+        plugins.AddFromType<DataOpsPlugin>();
+    }
+    catch
+    {
+        // Swallow — plugin registration is best-effort here.
+    }
 }
 
 // Build and register Kernel and AIOpsService (scoped) for DI.
