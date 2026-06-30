@@ -217,8 +217,8 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-// Diagnostics endpoint
-app.MapGet("/api/diagnostics/{transactionId}", async (Guid transactionId, SmartOps.Web.Services.DiagnosticOrchestratorService orchestrator) =>
+// Diagnostics endpoint (POST to accept webhook-style requests)
+app.MapPost("/api/diagnostics/{transactionId}", async (Guid transactionId, SmartOps.Web.Services.DiagnosticOrchestratorService orchestrator) =>
 {
     var result = await orchestrator.RunDiagnosticAsync(transactionId);
 

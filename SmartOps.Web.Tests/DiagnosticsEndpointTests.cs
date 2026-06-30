@@ -50,7 +50,7 @@ namespace SmartOps.Web.Tests
 
             var txId = Guid.NewGuid();
 
-            var response = await client.GetAsync($"/api/diagnostics/{txId}");
+            var response = await client.PostAsync($"/api/diagnostics/{txId}", null);
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal("text/markdown", response.Content.Headers.ContentType?.MediaType);
