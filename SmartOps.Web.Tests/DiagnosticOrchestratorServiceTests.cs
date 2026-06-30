@@ -13,7 +13,6 @@ public sealed class DiagnosticOrchestratorServiceTests
         public Task<string> ExecutePromptAsync(string userPrompt)
         {
             LastPrompt = userPrompt;
-            // Simulate model returning a structured markdown response
             var md = "## 🔍 Resumen del Error\nDetalle del error\n\n## 🛠️ Acciones Recomendadas para el Operador\n- Revisar logs\n\n## 📨 Plantilla de Correo para el Cliente\nEstimado cliente...";
             return Task.FromResult(md);
         }

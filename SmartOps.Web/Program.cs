@@ -8,9 +8,7 @@ using SmartOps.Web.Plugins;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Register a default Kernel and the AIOpsService so integration tests and app code can resolve them.
-// Kernel registration is intentionally minimal; real deployments should configure providers (OpenAI, etc.) as needed.
-// Configure KernelBuilder but defer building the kernel until after application services (DbContext) are registered.
+// Register Kernel and AIOpsService; build kernel after application services (DbContext) are registered.
 var skBuilder = Kernel.CreateBuilder();
 
 // Expected env vars: OPENAI_API_KEY, OPENAI_MODEL_ID (e.g., 'gpt-4o' or 'gpt-4o-mini').
@@ -78,7 +76,6 @@ builder.Services.AddSingleton<Kernel>(sp =>
         kb.AddOpenAIChatCompletion(Environment.GetEnvironmentVariable("OPENAI_API_KEY")!, null, modelId);
     }
 
-    // Register plugin using the real IServiceProvider so its dependencies (AppDbContext) are resolvable.
     try
     {
         var plugins = (System.Collections.Generic.ICollection<Microsoft.SemanticKernel.KernelPlugin>)kb.Plugins;
@@ -93,16 +90,13 @@ builder.Services.AddSingleton<Kernel>(sp =>
         }
         catch
         {
-            // best-effort
         }
     }
 
     var builtKernel = kb.Build();
 
-    // Attempt to register a native function directly on the kernel if the API exists.
     try
     {
-        // Use reflection to find a suitable RegisterNativeFunction or RegisterFunction method on Kernel
         var kernelType = builtKernel.GetType();
         var regMethod = kernelType.GetMethod("RegisterNativeFunction")
                         ?? kernelType.GetMethod("RegisterFunction")
@@ -111,7 +105,6 @@ builder.Services.AddSingleton<Kernel>(sp =>
 
         if (regMethod != null)
         {
-            // Create a delegate that resolves the plugin from DI and invokes the method
             System.Func<System.Threading.Tasks.Task<string>> del = async () =>
             {
                 var plugin = sp.GetService<DataOpsPlugin>() ?? ActivatorUtilities.CreateInstance<DataOpsPlugin>(sp);
@@ -120,18 +113,15 @@ builder.Services.AddSingleton<Kernel>(sp =>
 
             try
             {
-                // Try simple invoke: some methods expect name+delegate
                 regMethod.Invoke(builtKernel, new object[] { "DataOps.GetFailedTransactions", del });
             }
             catch
             {
-                // fallback: ignore — kernel will still have plugin via Plugins collection
             }
         }
     }
     catch
     {
-        // best-effort, ignore if registration via reflection fails
     }
 
     return builtKernel;
