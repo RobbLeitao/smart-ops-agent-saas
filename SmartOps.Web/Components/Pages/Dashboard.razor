@@ -5,71 +5,104 @@
 @inject SmartOps.Infrastructure.Data.AppDbContext Db
 @inject SmartOps.Web.Services.DiagnosticOrchestratorService Orchestrator
 
-<h3>Failed Transactions</h3>
+<div class="bg-light min-vh-100 py-5">
+    <div class="container">
+        <div class="card rounded shadow-sm p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-0">Centro de Operaciones de IA</h2>
+                    <small class="text-muted">Monitoreo y diagnóstico de transacciones</small>
+                </div>
+                <div class="d-flex gap-3">
+                    <div class="p-3 bg-white rounded shadow-sm text-center" style="min-width:140px;">
+                        <div class="text-muted small">Transacciones Fallidas</div>
+                        <div class="h5 mb-0">@((failedTransactions?.Count) ?? 0)</div>
+                    </div>
+                    <div class="p-3 bg-white rounded shadow-sm text-center" style="min-width:140px;">
+                        <div class="text-muted small">Estado del Kernel</div>
+                        <div class="h5 mb-0 text-success">Activo</div>
+                    </div>
+                </div>
+            </div>
 
-@if (failedTransactions == null)
-{
-    <p>Loading...</p>
-}
-else if (failedTransactions.Count == 0)
-{
-    <p>No failed transactions found.</p>
-}
-else
-{
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Id</th>
-                <th>Amount</th>
-                <th>Currency</th>
-                <th>Error</th>
-                <th>OccurredAt</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var t in failedTransactions)
+            @if (failedTransactions == null)
             {
-                <tr>
-                    <td>@t.Id</td>
-                    <td>@t.Amount</td>
-                    <td>@t.Currency</td>
-                    <td>@t.ErrorMessage</td>
-                    <td>@t.OccurredAt?.ToString("g")</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary" @onclick="() => AnalyzeAsync(t.Id)" disabled="@IsProcessing(t.Id)">
-                            @if (IsProcessing(t.Id))
-                            {
-                                <span>Analizando...</span>
-                            }
-                            else
-                            {
-                                <span>Analizar con IA</span>
-                            }
-                        </button>
-                        @if (isAnalyzing)
-                        {
-                            <div class="ms-2 text-muted" style="display:inline-block">Analizando transacción...</div>
-                        }
-                    </td>
-                </tr>
-                if (diagnostics.TryGetValue(t.Id, out var md) && !string.IsNullOrWhiteSpace(md))
+                <p>Loading...</p>
+            }
+            else if (failedTransactions.Count == 0)
+            {
+                <p>No failed transactions found.</p>
+            }
+            else
+            {
+                @if (isAnalyzing)
                 {
-                    <tr>
-                        <td colspan="6">
-                            <div class="card">
-                                <div class="card-body">
-                                    @((MarkupString)RenderMarkdown(md))
-                                </div>
-                            </div>
-                        </td>
-                    </tr>
+                    <div class="d-flex flex-column align-items-center justify-content-center py-5">
+                        <div class="spinner-border text-primary" role="status" style="width:3rem;height:3rem;"></div>
+                        <div class="text-muted mt-3">Orquestando diagnóstico inteligente...</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-borderless align-middle">
+                            <thead>
+                                <tr class="text-muted small">
+                                    <th class="ps-3">Id</th>
+                                    <th>Amount</th>
+                                    <th>Currency</th>
+                                    <th>Error</th>
+                                    <th>OccurredAt</th>
+                                    <th class="text-end pe-3">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var t in failedTransactions)
+                                {
+                                    <tr class="align-middle">
+                                        <td class="ps-3"><strong>@t.Id</strong></td>
+                                        <td>@t.Amount</td>
+                                        <td>@t.Currency</td>
+                                        <td>
+                                            <span class="badge rounded-pill" style="background-color:#F8D7DA;color:#842029;">Failed</span>
+                                            <div class="text-muted small">@t.ErrorMessage</div>
+                                        </td>
+                                        <td>@t.OccurredAt?.ToString("g")</td>
+                                        <td class="text-end pe-3">
+                                            <button class="btn" style="background-color:#0d6efd;color:white;border-radius:6px;padding:6px 12px;border:none;" @onclick="() => AnalyzeAsync(t.Id)" disabled="@IsProcessing(t.Id)">
+                                                @if (IsProcessing(t.Id))
+                                                {
+                                                    <span>Analizando...</span>
+                                                }
+                                                else
+                                                {
+                                                    <span>Analizar con IA</span>
+                                                }
+                                            </button>
+                                        </td>
+                                    </tr>
+
+                                    if (diagnostics.TryGetValue(t.Id, out var md) && !string.IsNullOrWhiteSpace(md))
+                                    {
+                                        <tr>
+                                            <td colspan="6">
+                                                <div class="p-3 bg-white" style="border-left:6px solid #0d6efd;">
+                                                    <div style="font-family:Segoe UI, Roboto, Arial, sans-serif; color:#111;">
+                                                        @((MarkupString)RenderMarkdown(md))
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
                 }
             }
-        </tbody>
-    </table>
-}
+        </div>
+    </div>
+</div>
 
 @code {
     private List<Transaction>? failedTransactions;
