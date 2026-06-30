@@ -3,13 +3,31 @@ using Microsoft.EntityFrameworkCore;
 using SmartOps.Infrastructure.Data;
 using SmartOps.Web.Components;
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Register a default Kernel and the AIOpsService so integration tests and app code can resolve them.
 // Kernel registration is intentionally minimal; real deployments should configure providers (OpenAI, etc.) as needed.
 var skBuilder = Kernel.CreateBuilder();
-// Allow tests or app code to customize the builder services if needed. For now register the kernel constructed from the builder.
+
+// Configure OpenAI chat completion from environment variables so deployments can override via env.
+// Expected env vars: OPENAI_API_KEY, OPENAI_MODEL_ID (e.g., 'gpt-4o' or 'gpt-4o-mini').
+var openAiApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+var openAiModelId = Environment.GetEnvironmentVariable("OPENAI_MODEL_ID") ?? "gpt-4o";
+
+if (!string.IsNullOrWhiteSpace(openAiApiKey))
+{
+    // Register OpenAI chat completion only when API key is present (e.g., in CI/dev machines).
+    skBuilder.AddOpenAIChatCompletion(openAiApiKey, null, openAiModelId);
+}
+else
+{
+    // No API key supplied — continue without registering OpenAI provider so tests and local runs don't fail.
+    // This leaves the kernel usable for non-OpenAI scenarios and allows tests to run without external credentials.
+}
+
+// Build and register Kernel and AIOpsService (scoped) for DI.
 var kernel = skBuilder.Build();
 builder.Services.AddSingleton(kernel);
 builder.Services.AddScoped<SmartOps.Web.Services.AIOpsService>();
