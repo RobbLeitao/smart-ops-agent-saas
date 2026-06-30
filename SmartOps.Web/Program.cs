@@ -139,6 +139,7 @@ builder.Services.AddSingleton<Kernel>(sp =>
 
 // Register AIOpsService and plugin in DI
 builder.Services.AddScoped<SmartOps.Web.Services.AIOpsService>();
+builder.Services.AddScoped<SmartOps.Web.Services.IAIOpsService>(sp => sp.GetRequiredService<SmartOps.Web.Services.AIOpsService>());
 builder.Services.AddScoped<DataOpsPlugin>();
 
 // Proceed with building the app further below...

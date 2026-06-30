@@ -3,7 +3,12 @@ using Microsoft.SemanticKernel;
 
 namespace SmartOps.Web.Services
 {
-    public sealed class AIOpsService
+    public interface IAIOpsService
+    {
+        Task<string> ExecutePromptAsync(string userPrompt);
+    }
+
+    public sealed class AIOpsService : IAIOpsService
     {
         private readonly Kernel _kernel;
 
