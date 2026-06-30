@@ -12,6 +12,58 @@ a, .btn-link {
     border-color: #1861ac;
 }
 
+/* Hito 8.5 visual refinements */
+.nav-item .nav-link {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    display: block;
+}
+
+.nav-item .nav-link[aria-disabled="true"] {
+    color: #94a3b8 !important; /* ensure readable contrast */
+    cursor: not-allowed;
+    white-space: normal;
+    line-height: 1.2;
+    max-width: 220px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.btn-ia {
+    background-color: #635bff;
+    color: white;
+    border-radius: 6px;
+    padding: 6px 12px;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn-ia[disabled] {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.btn-ia .spinner-sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.15rem;
+}
+
+/* shutterIn animation for result panel */
+@keyframes shutterIn {
+  0% { transform-origin: top; transform: scaleY(0); opacity: 0; }
+  60% { transform: scaleY(1.03); opacity: 0.6; }
+  100% { transform: scaleY(1); opacity: 1; }
+}
+
+.diagnostic-panel {
+    animation: shutterIn 360ms ease-out;
+    transform-origin: top;
+}
+
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
   box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
 }
