@@ -69,7 +69,7 @@
                                         </td>
                                         <td>@t.OccurredAt?.ToString("g")</td>
                                         <td class="text-end pe-3">
-                                            <button class="btn" style="background-color:#0d6efd;color:white;border-radius:6px;padding:6px 12px;border:none;" @onclick="() => AnalyzeAsync(t.Id)" disabled="@IsProcessing(t.Id)">
+                                            <button class="btn" style="background-color:#635bff;color:white;border-radius:6px;padding:6px 12px;border:none;" @onclick="() => AnalyzeAsync(t.Id)" disabled="@IsProcessing(t.Id)">
                                                 @if (IsProcessing(t.Id))
                                                 {
                                                     <span>Analizando...</span>
