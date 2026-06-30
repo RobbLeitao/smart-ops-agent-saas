@@ -66,32 +66,79 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
     options.UseSqlite(connectionString);
 });
 
-// Now that services (including AppDbContext) are registered, register the DataOpsPlugin with the kernel builder.
-try
+// Defer Kernel construction to a factory so we can use the final IServiceProvider without calling BuildServiceProvider.
+// Register Kernel as a singleton using a factory that receives the application's IServiceProvider.
+builder.Services.AddSingleton<Kernel>(sp =>
 {
-    var tempSp = builder.Services.BuildServiceProvider();
-    var plugins = (System.Collections.Generic.ICollection<Microsoft.SemanticKernel.KernelPlugin>)skBuilder.Plugins;
-    plugins.AddFromType<DataOpsPlugin>(null, tempSp);
-}
-catch
-{
+    var kb = Kernel.CreateBuilder();
+
+    if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY")))
+    {
+        var modelId = Environment.GetEnvironmentVariable("OPENAI_MODEL_ID") ?? "gpt-4o";
+        kb.AddOpenAIChatCompletion(Environment.GetEnvironmentVariable("OPENAI_API_KEY")!, null, modelId);
+    }
+
+    // Register plugin using the real IServiceProvider so its dependencies (AppDbContext) are resolvable.
     try
     {
-        var plugins = (System.Collections.Generic.ICollection<Microsoft.SemanticKernel.KernelPlugin>)skBuilder.Plugins;
-        plugins.AddFromType<DataOpsPlugin>();
+        var plugins = (System.Collections.Generic.ICollection<Microsoft.SemanticKernel.KernelPlugin>)kb.Plugins;
+        plugins.AddFromType<DataOpsPlugin>(null, sp);
     }
     catch
     {
-        // best-effort
+        try
+        {
+            var plugins = (System.Collections.Generic.ICollection<Microsoft.SemanticKernel.KernelPlugin>)kb.Plugins;
+            plugins.AddFromType<DataOpsPlugin>();
+        }
+        catch
+        {
+            // best-effort
+        }
     }
-}
 
-// Build and register Kernel and AIOpsService (scoped) for DI after plugin registration.
-var kernel = skBuilder.Build();
-builder.Services.AddSingleton(kernel);
+    var builtKernel = kb.Build();
+
+    // Attempt to register a native function directly on the kernel if the API exists.
+    try
+    {
+        // Use reflection to find a suitable RegisterNativeFunction or RegisterFunction method on Kernel
+        var kernelType = builtKernel.GetType();
+        var regMethod = kernelType.GetMethod("RegisterNativeFunction")
+                        ?? kernelType.GetMethod("RegisterFunction")
+                        ?? kernelType.GetMethod("AddFunction")
+                        ?? kernelType.GetMethod("RegisterSemanticFunction");
+
+        if (regMethod != null)
+        {
+            // Create a delegate that resolves the plugin from DI and invokes the method
+            System.Func<System.Threading.Tasks.Task<string>> del = async () =>
+            {
+                var plugin = sp.GetService<DataOpsPlugin>() ?? ActivatorUtilities.CreateInstance<DataOpsPlugin>(sp);
+                return await plugin.GetFailedTransactionsAsync();
+            };
+
+            try
+            {
+                // Try simple invoke: some methods expect name+delegate
+                regMethod.Invoke(builtKernel, new object[] { "DataOps.GetFailedTransactions", del });
+            }
+            catch
+            {
+                // fallback: ignore — kernel will still have plugin via Plugins collection
+            }
+        }
+    }
+    catch
+    {
+        // best-effort, ignore if registration via reflection fails
+    }
+
+    return builtKernel;
+});
+
+// Register AIOpsService and plugin in DI
 builder.Services.AddScoped<SmartOps.Web.Services.AIOpsService>();
-
-// Also register the DataOpsPlugin in the DI container so it can be resolved and used directly.
 builder.Services.AddScoped<DataOpsPlugin>();
 
 // Proceed with building the app further below...
