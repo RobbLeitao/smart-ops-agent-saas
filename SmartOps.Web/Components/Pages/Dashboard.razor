@@ -36,7 +36,7 @@
             else
             {
                     <div class="table-responsive">
-                        <table class="table table-borderless align-middle">
+                        <table class="table table-borderless align-middle" style="background:transparent;color:inherit;">
                             <thead>
                                                     <tr class="text-slate-400 small">
                                     <th class="ps-3">Id</th>
@@ -55,8 +55,8 @@
                                         <td>@t.Amount</td>
                                         <td>@t.Currency</td>
                                         <td>
-                                            <span class="badge rounded-pill" style="background-color:#F8D7DA;color:#842029;">Failed</span>
-                                            <div class="text-muted small">@t.ErrorMessage</div>
+                                            <span class="badge rounded-pill" style="background-color:#2b3440;color:#e6eef8;border:1px solid rgba(255,255,255,0.02);">Failed</span>
+                                                                                        <div class="text-slate-400 small">@t.ErrorMessage</div>
                                         </td>
                                         <td>@t.OccurredAt?.ToString("g")</td>
                                         <td class="text-end pe-3">
