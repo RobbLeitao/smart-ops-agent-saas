@@ -214,13 +214,54 @@
 
     private string RenderMarkdown(string md)
     {
-        // Very simple markdown rendering: headings and line breaks
-        var html = System.Net.WebUtility.HtmlEncode(md);
-        html = System.Text.RegularExpressions.Regex.Replace(html, "^## (.+)$", "<h4>$1</h4>", System.Text.RegularExpressions.RegexOptions.Multiline);
-        html = html.Replace("\n\n", "<br/><br/>");
-        html = html.Replace("- ", "<li>").Replace("\n", "</li>\n");
-        return html;
-    }
+            // Improved simple markdown renderer: headings, lists and paragraphs
+            if (string.IsNullOrWhiteSpace(md)) return string.Empty;
+
+            var encoded = System.Net.WebUtility.HtmlEncode(md);
+            var lines = encoded.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var sb = new System.Text.StringBuilder();
+            bool inList = false;
+
+            foreach (var raw in lines)
+            {
+                var line = raw.Trim();
+                // Headings
+                if (line.StartsWith("## "))
+                {
+                    if (inList)
+                    {
+                        sb.AppendLine("</ul>");
+                        inList = false;
+                    }
+                    sb.AppendLine($"<h4>{line.Substring(3).Trim()}</h4>");
+                    continue;
+                }
+
+                // List items
+                if (line.StartsWith("- "))
+                {
+                    if (!inList)
+                    {
+                        sb.AppendLine("<ul style=\"margin-left:1rem;padding-left:1rem\">\n");
+                        inList = true;
+                    }
+                    sb.AppendLine($"<li>{line.Substring(2).Trim()}</li>");
+                    continue;
+                }
+
+                // Paragraph / plain line
+                if (inList)
+                {
+                    sb.AppendLine("</ul>");
+                    inList = false;
+                }
+
+                sb.AppendLine($"<p>{line}</p>");
+            }
+
+            if (inList) sb.AppendLine("</ul>");
+            return sb.ToString();
+        }
 
     private void ShowDiagnostic(int id, string md)
     {
