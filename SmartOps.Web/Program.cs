@@ -165,6 +165,20 @@ builder.Services.AddScoped<SmartOps.Web.Services.IAIOpsService>(sp => sp.GetRequ
 builder.Services.AddScoped<DataOpsPlugin>();
 builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticOrchestratorService>();
 
+// Register ITransactionAnalyzer abstraction and choose implementation based on configuration
+var openAiSection = builder.Configuration.GetSection("OpenAI");
+var openAiKey = openAiSection.GetValue<string>("ApiKey");
+if (!string.IsNullOrWhiteSpace(openAiKey))
+{
+    // If an OpenAI key exists, use the orchestrator-backed analyzer which will use the Kernel/OpenAI path
+    builder.Services.AddScoped<SmartOps.Web.Services.ITransactionAnalyzer, SmartOps.Web.Services.OpenAITransactionAnalyzer>();
+}
+else
+{
+    // Default to DevFake analyzer in development/no-key scenarios
+    builder.Services.AddSingleton<SmartOps.Web.Services.ITransactionAnalyzer, SmartOps.Web.Services.DevFakeTransactionAnalyzer>();
+}
+
 // Proceed with building the app further below...
 
 // Add services to the container.
