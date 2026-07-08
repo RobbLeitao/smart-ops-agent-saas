@@ -151,6 +151,14 @@ a, .btn-link {
     border: 1px solid rgba(71,85,103,0.4); /* border-slate-700/40 */
     border-radius: 0.75rem;
 }
+/* Make table inside grid less contrasting: 50% white overlay */
+.grid-dark .table {
+    background-color: rgba(255,255,255,0.5) !important; /* semi-transparent panel */
+}
+/* Table text should remain dark for readability (not inherit the slate page color) */
+.grid-dark .table, .grid-dark .table th, .grid-dark .table td {
+    color: #0f1724 !important; /* dark text on semi-transparent white */
+}
 
 .shadow-lg { box-shadow: 0 8px 24px rgba(2,6,23,0.6); }
 .border-gray-200 { border-color: rgba(229,231,235,0.04); }

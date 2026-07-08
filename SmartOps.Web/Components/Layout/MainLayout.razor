@@ -3,19 +3,21 @@
 <div class="page w-100">
     <header class="header-bar shadow-sm" style="background-color:#212835;border-bottom:1px solid rgba(71,85,103,0.2);">
         <div class="container d-flex align-items-center py-3">
-            <a class="navbar-brand me-4 text-white h4" href="/">SmartOps</a>
+            <a class="navbar-brand me-4 text-white h4 d-flex align-items-center" href="/">
+                <img src="/images/logo.png" alt="SmartOps" style="height:34px;object-fit:contain;display:block;" />
+            </a>
 
             <nav class="nav nav-tabs ms-3" style="border-bottom:none;">
                             <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">
-                                <span class="nav-icon">📊</span>
+                                <i class="bi bi-bar-chart-line nav-icon" aria-hidden="true"></i>
                                 <span class="nav-text">Dashboard</span>
                             </NavLink>
                             <NavLink class="nav-link" href="/diagnostics-history">
-                                <span class="nav-icon">🕘</span>
+                                <i class="bi bi-clock-history nav-icon" aria-hidden="true"></i>
                                 <span class="nav-text">Historial</span>
                             </NavLink>
                             <NavLink class="nav-link" href="/integrations">
-                                <span class="nav-icon">🔌</span>
+                                <i class="bi bi-plug nav-icon" aria-hidden="true"></i>
                                 <span class="nav-text">Integraciones</span>
                             </NavLink>
                         </nav>
