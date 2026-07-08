@@ -1,15 +1,19 @@
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    /* Cyberpunk Ejecutivo background */
+    background-color: #0b0b0d; /* nearly black */
+    color: #e6eef8; /* light slate */
+    min-height: 100vh;
 }
 
 a, .btn-link {
-    color: #006bb7;
+    color: #7dd3fc; /* cyan-300 */
 }
 
 .btn-primary {
-    color: #fff;
-    background-color: #1b6ec2;
-    border-color: #1861ac;
+    color: #0b0b0d;
+    background-color: #7c3aed; /* violet */
+    border-color: #6d28d9;
 }
 
 /* Hito 8.5 visual refinements */
@@ -17,6 +21,7 @@ a, .btn-link {
     padding: 0.75rem 1rem;
     border-radius: 8px;
     display: block;
+    color: #e6eef8;
 }
 
 .nav-item .nav-link[aria-disabled="true"] {
@@ -96,11 +101,47 @@ a, .btn-link {
 .prose ul { margin-left: 1rem; padding-left: 1.1rem; }
 .prose li { margin-bottom: 0.25rem; }
 
-/* Adjust diagnostic card spacing and subtle shadow */
+/* Adjust diagnostic card spacing and cyberpunk theme for cards */
 .diagnostic-card { margin-top: 1.5rem; margin-bottom: 1.5rem; }
 .diagnostic-card.p-8 { padding: 2rem; }
-.shadow-lg { box-shadow: 0 12px 32px rgba(15,23,42,0.06), 0 4px 10px rgba(15,23,42,0.04); }
-.border-gray-200 { border-color: #e5e7eb; }
+/* Transaction grid background */
+.grid-dark {
+    background-color: rgba(17,24,39,0.6); /* neutral-900/60 */
+    border: 1px solid #111827; /* neutral-800 */
+}
+
+.shadow-lg { box-shadow: 0 12px 32px rgba(147,51,234,0.06), 0 4px 10px rgba(15,23,42,0.04); }
+.border-gray-200 { border-color: rgba(229,231,235,0.06); }
+
+/* Diagnostic gem: gradient panel */
+.diagnostic-gem {
+    background-image: linear-gradient(135deg, rgba(57,14,80,0.55), rgba(17,24,39,0.8) 50%, rgba(40,31,70,0.55));
+    border: 1px solid rgba(124,58,237,0.12); /* purple-900/30 */
+    box-shadow: 0 0 30px rgba(147,51,234,0.15);
+    border-radius: 1rem;
+    padding: 2rem;
+    margin: 1.5rem 0;
+    color: #e6eef8; /* text-slate-100 */
+}
+
+.diagnostic-gem h2, .diagnostic-gem h3, .diagnostic-gem h4 {
+    color: #ffffff;
+}
+
+.diagnostic-gem .section-title {
+    color: #34d399; /* emerald-400 */
+    font-weight: 600;
+}
+
+.diagnostic-gem .highlight-cyan {
+    color: #22d3ee; /* cyan-400 */
+}
+
+.diagnostic-gem p, .diagnostic-gem li {
+    color: #e6eef8;
+    line-height: 1.6;
+}
+
 
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
   box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
