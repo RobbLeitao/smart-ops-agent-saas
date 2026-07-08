@@ -77,15 +77,15 @@
                                     {
                                         <tr>
                                             <td colspan="6">
-                                                <div class="p-3 bg-white diagnostic-panel position-relative" style="border-left:6px solid #0d6efd;">
+                                                <div class="diagnostic-card position-relative bg-white rounded-2xl shadow-lg border border-gray-100 mt-6 p-6 animate-fade-in" style="border-left:6px solid #0d6efd;">
                                                                                                     <button type="button" class="btn-close position-absolute" style="right:12px;top:12px;" aria-label="Close" @onclick="() => CloseDiagnostic(t.Id)"></button>
-                                                                                                    <div style="font-family:Segoe UI, Roboto, Arial, sans-serif; color:#111;">
+                                                                                                    <div class="diagnostic-content prose prose-slate max-w-none text-gray-700 leading-relaxed" style="font-family:Segoe UI, Roboto, Arial, sans-serif; color:#111;">
                                                                                                         @((MarkupString)RenderMarkdown(md))
                                                                                                     </div>
 
                                                                                                     @if (technicalDetails.TryGetValue(t.Id, out var tech) && !string.IsNullOrWhiteSpace(tech))
                                                                                                     {
-                                                                                                        <div class="mt-2">
+                                                                                                        <div class="mt-4">
                                                                                                             <a href="#" @onclick="(e) => ToggleTech(e, t.Id)">[+] Ver detalles técnicos</a>
                                                                                                             @if (showTech.Contains(t.Id))
                                                                                                             {

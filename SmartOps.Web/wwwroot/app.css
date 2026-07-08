@@ -64,6 +64,38 @@ a, .btn-link {
     transform-origin: top;
 }
 
+/* Fade-in animation for premium card */
+@keyframes fadeInUp {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeInUp 320ms ease-out;
+}
+
+/* Shadow-lg polyfill in case bootstrap is used */
+.shadow-lg {
+    box-shadow: 0 10px 30px rgba(15,23,42,0.08), 0 2px 6px rgba(15,23,42,0.04);
+}
+
+.rounded-2xl {
+    border-radius: 1rem;
+}
+
+.border-gray-100 {
+    border-color: #f3f4f6;
+}
+
+.prose-slate {
+    color: #374151;
+}
+
+.max-w-none { max-width: none !important; }
+
+.prose ul { margin-left: 1rem; padding-left: 1.1rem; }
+.prose li { margin-bottom: 0.25rem; }
+
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
   box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
 }
