@@ -96,6 +96,12 @@ a, .btn-link {
 .prose ul { margin-left: 1rem; padding-left: 1.1rem; }
 .prose li { margin-bottom: 0.25rem; }
 
+/* Adjust diagnostic card spacing and subtle shadow */
+.diagnostic-card { margin-top: 1.5rem; margin-bottom: 1.5rem; }
+.diagnostic-card.p-8 { padding: 2rem; }
+.shadow-lg { box-shadow: 0 12px 32px rgba(15,23,42,0.06), 0 4px 10px rgba(15,23,42,0.04); }
+.border-gray-200 { border-color: #e5e7eb; }
+
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
   box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
 }
