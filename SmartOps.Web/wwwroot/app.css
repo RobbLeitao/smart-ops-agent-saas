@@ -36,10 +36,28 @@ a, .btn-link {
 .nav-link .nav-text { font-size: 0.95rem; }
 
 .nav-link.active, .nav-link[aria-current="page"] {
-    color: #ffffff; /* active tab */
-    border-bottom: 2px solid #3b82f6; /* border-blue-500 */
-    background: transparent !important; /* remove white pill from Bootstrap */
+    color: #3b82f6 !important; /* active text blue */
+    background: transparent !important; /* no pill */
     padding-bottom: 0.45rem;
+    border: none !important;
+    border-bottom: 3px solid #3b82f6 !important; /* only bottom border */
+    box-shadow: none !important;
+}
+
+/* Icon and text colors for active/inactive */
+.nav-link .nav-icon, .nav-link .nav-text {
+    color: #94a3b8; /* default inactive color */
+}
+.nav-link.active .nav-icon, .nav-link.active .nav-text,
+.nav-link[aria-current="page"] .nav-icon, .nav-link[aria-current="page"] .nav-text {
+    color: #3b82f6 !important; /* active bright blue */
+}
+
+/* Prevent hover from changing text color */
+.nav-link:hover, .nav-link:focus {
+    color: inherit !important;
+    background: transparent !important;
+    text-decoration: none;
 }
 
 /* Ensure nav-link pills don't show white background */
