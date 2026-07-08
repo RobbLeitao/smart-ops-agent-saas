@@ -77,22 +77,23 @@
                                     {
                                         <tr>
                                             <td colspan="6">
-                                                <div class="p-3 bg-white diagnostic-panel" style="border-left:6px solid #0d6efd;">
-                                                    <div style="font-family:Segoe UI, Roboto, Arial, sans-serif; color:#111;">
-                                                        @((MarkupString)RenderMarkdown(md))
-                                                    </div>
+                                                <div class="p-3 bg-white diagnostic-panel position-relative" style="border-left:6px solid #0d6efd;">
+                                                                                                    <button type="button" class="btn-close position-absolute" style="right:12px;top:12px;" aria-label="Close" @onclick="() => CloseDiagnostic(t.Id)"></button>
+                                                                                                    <div style="font-family:Segoe UI, Roboto, Arial, sans-serif; color:#111;">
+                                                                                                        @((MarkupString)RenderMarkdown(md))
+                                                                                                    </div>
 
-                                                    @if (technicalDetails.TryGetValue(t.Id, out var tech) && !string.IsNullOrWhiteSpace(tech))
-                                                    {
-                                                        <div class="mt-2">
-                                                            <a href="#" @onclick="(e) => ToggleTech(e, t.Id)">[+] Ver detalles técnicos</a>
-                                                            @if (showTech.Contains(t.Id))
-                                                            {
-                                                                <pre class="mt-2" style="background:#f8f9fa;padding:10px;border-radius:6px;font-size:12px;">@tech</pre>
-                                                            }
-                                                        </div>
-                                                    }
-                                                </div>
+                                                                                                    @if (technicalDetails.TryGetValue(t.Id, out var tech) && !string.IsNullOrWhiteSpace(tech))
+                                                                                                    {
+                                                                                                        <div class="mt-2">
+                                                                                                            <a href="#" @onclick="(e) => ToggleTech(e, t.Id)">[+] Ver detalles técnicos</a>
+                                                                                                            @if (showTech.Contains(t.Id))
+                                                                                                            {
+                                                                                                                <pre class="mt-2" style="background:#f8f9fa;padding:10px;border-radius:6px;font-size:12px;">@tech</pre>
+                                                                                                            }
+                                                                                                        </div>
+                                                                                                    }
+                                                                                                </div>
                                             </td>
                                         </tr>
                                     }
@@ -100,7 +101,6 @@
                             </tbody>
                         </table>
                     </div>
-                }
             }
         </div>
     </div>
@@ -179,8 +179,7 @@
                 try
                 {
                     var md = await Orchestrator.RunDiagnosticAsync(tx);
-                    diagnostics[id] = md ?? "";
-                    technicalDetails[id] = string.Empty; // clear previous
+                                        ShowDiagnostic(id, md ?? "");
                 }
                 catch (Exception exInner)
                 {
@@ -223,8 +222,29 @@
         return html;
     }
 
-    private void ToggleTech(Microsoft.AspNetCore.Components.Web.MouseEventArgs e, int id)
+    private void ShowDiagnostic(int id, string md)
     {
-        if (showTech.Contains(id)) showTech.Remove(id); else showTech.Add(id);
-    }
+            // Clear diagnostics for other transactions so only one panel is open at a time
+            var otherKeys = diagnostics.Keys.ToList();
+            foreach (var k in otherKeys)
+            {
+                if (k != id) diagnostics[k] = string.Empty;
+            }
+
+            diagnostics[id] = md;
+            technicalDetails[id] = string.Empty;
+            showTech.Remove(id);
+        }
+
+        private void CloseDiagnostic(int id)
+        {
+            diagnostics[id] = string.Empty;
+            technicalDetails.Remove(id);
+            showTech.Remove(id);
+        }
+
+        private void ToggleTech(Microsoft.AspNetCore.Components.Web.MouseEventArgs e, int id)
+        {
+            if (showTech.Contains(id)) showTech.Remove(id); else showTech.Add(id);
+        }
 }
