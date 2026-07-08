@@ -1,17 +1,17 @@
 ﻿@inherits LayoutComponentBase
 
 <div class="page w-100">
-    <header class="top-nav bg-white shadow-sm" style="border-bottom:1px solid rgba(16,24,32,0.06);">
-        <div class="container d-flex align-items-center py-2">
-            <a class="navbar-brand me-4" href="/">SmartOps</a>
+    <header class="header-bar shadow-sm">
+        <div class="container d-flex align-items-center py-3">
+            <a class="navbar-brand me-4 text-white h4" href="/">SmartOps</a>
 
-            <nav class="nav nav-tabs" style="border-bottom:none;">
+            <nav class="nav nav-tabs ms-3" style="border-bottom:none;">
                 <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
-                <NavLink class="nav-link" href="/diagnostics-history">Historial de Diagnósticos</NavLink>
-                <NavLink class="nav-link" href="/integrations">Configuración de Integraciones</NavLink>
+                <NavLink class="nav-link" href="/diagnostics-history">Historial</NavLink>
+                <NavLink class="nav-link" href="/integrations">Integraciones</NavLink>
             </nav>
 
-            <div class="ms-auto text-muted small">
+            <div class="ms-auto text-slate-400 small">
                 Centro de Operaciones
             </div>
         </div>
