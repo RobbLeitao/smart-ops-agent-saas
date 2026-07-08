@@ -11,20 +11,46 @@ var builder = WebApplication.CreateBuilder(args);
 // Register Kernel and AIOpsService; build kernel after application services (DbContext) are registered.
 var skBuilder = Kernel.CreateBuilder();
 
-// Expected env vars: OPENAI_API_KEY, OPENAI_MODEL_ID (e.g., 'gpt-4o' or 'gpt-4o-mini').
-var openAiApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-var openAiModelId = Environment.GetEnvironmentVariable("OPENAI_MODEL_ID") ?? "gpt-4o";
+// Read AI configuration from appsettings.json or environment variables
+var aiSection = builder.Configuration.GetSection("AI");
+var aiProvider = aiSection.GetValue<string>("Provider") ?? Environment.GetEnvironmentVariable("AI_PROVIDER");
+var aiApiKey = aiSection.GetValue<string>("ApiKey") ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+var aiModelId = aiSection.GetValue<string>("Model") ?? Environment.GetEnvironmentVariable("OPENAI_MODEL_ID") ?? "gpt-4o";
 
-if (!string.IsNullOrWhiteSpace(openAiApiKey))
+if (!string.IsNullOrWhiteSpace(aiApiKey) && !string.IsNullOrWhiteSpace(aiProvider))
 {
-    // Register OpenAI chat completion only when API key is present (e.g., in CI/dev machines).
-    skBuilder.AddOpenAIChatCompletion(openAiApiKey, null, openAiModelId);
+    // Support provider selection; default to OpenAI if provider mentions "openai"
+    if (aiProvider.Equals("OpenAI", StringComparison.OrdinalIgnoreCase) || aiProvider.Contains("openai", StringComparison.OrdinalIgnoreCase))
+    {
+        skBuilder.AddOpenAIChatCompletion(aiApiKey, null, aiModelId);
+    }
+    else if (aiProvider.Equals("AzureOpenAI", StringComparison.OrdinalIgnoreCase) || aiProvider.Contains("azure", StringComparison.OrdinalIgnoreCase))
+    {
+        // If using Azure, expect ApiKey and Endpoint in config
+        var endpoint = aiSection.GetValue<string>("Endpoint") ?? Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT");
+        if (!string.IsNullOrWhiteSpace(endpoint))
+        {
+            skBuilder.AddAzureOpenAIChatCompletion(endpoint, aiApiKey, aiModelId);
+        }
+        else
+        {
+            // Fallback to OpenAI if endpoint missing
+            skBuilder.AddOpenAIChatCompletion(aiApiKey, null, aiModelId);
+        }
+    }
+    else
+    {
+        // Unknown provider: attempt OpenAI
+        skBuilder.AddOpenAIChatCompletion(aiApiKey, null, aiModelId);
+    }
 }
 else
 {
-    // No OpenAI key configured: register a development fake IChatCompletionService so the Kernel can execute in dev mode.
-    // Register before Kernel singleton so we don't modify the service collection from inside the factory.
-    builder.Services.AddSingleton<Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService, SmartOps.Web.Services.DevFakeChatCompletionService>();
+    // No AI key/config: register a development fake adapter so the Kernel can execute in dev mode.
+    // Register the adapter for the common interfaces the kernel may resolve during execution.
+    builder.Services.AddSingleton<SmartOps.Web.Services.DevFakeKernelAdapter>();
+    builder.Services.AddSingleton<Microsoft.SemanticKernel.ChatCompletion.IChatCompletionService>(sp => sp.GetRequiredService<SmartOps.Web.Services.DevFakeKernelAdapter>());
+    builder.Services.AddSingleton<Microsoft.SemanticKernel.TextGeneration.ITextGenerationService>(sp => sp.GetRequiredService<SmartOps.Web.Services.DevFakeKernelAdapter>());
 }
 
 // Add services to the container (DbContext is registered below). Kernel will be built after services are configured.

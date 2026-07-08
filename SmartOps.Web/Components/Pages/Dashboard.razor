@@ -35,15 +35,6 @@
             }
             else
             {
-                @if (isAnalyzing)
-                {
-                    <div class="d-flex flex-column align-items-center justify-content-center py-5">
-                        <div class="spinner-border text-primary" role="status" style="width:3rem;height:3rem;"></div>
-                        <div class="text-muted mt-3">Orquestando diagnóstico inteligente...</div>
-                    </div>
-                }
-                else
-                {
                     <div class="table-responsive">
                         <table class="table table-borderless align-middle">
                             <thead>
@@ -90,6 +81,17 @@
                                                     <div style="font-family:Segoe UI, Roboto, Arial, sans-serif; color:#111;">
                                                         @((MarkupString)RenderMarkdown(md))
                                                     </div>
+
+                                                    @if (technicalDetails.TryGetValue(t.Id, out var tech) && !string.IsNullOrWhiteSpace(tech))
+                                                    {
+                                                        <div class="mt-2">
+                                                            <a href="#" @onclick="(e) => ToggleTech(e, t.Id)">[+] Ver detalles técnicos</a>
+                                                            @if (showTech.Contains(t.Id))
+                                                            {
+                                                                <pre class="mt-2" style="background:#f8f9fa;padding:10px;border-radius:6px;font-size:12px;">@tech</pre>
+                                                            }
+                                                        </div>
+                                                    }
                                                 </div>
                                             </td>
                                         </tr>
@@ -108,7 +110,8 @@
     private List<Transaction>? failedTransactions;
     private Dictionary<int, bool> processing = new();
     private Dictionary<int, string> diagnostics = new();
-    private bool isAnalyzing = false;
+    private Dictionary<int, string> technicalDetails = new();
+    private HashSet<int> showTech = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -152,41 +155,49 @@
     private async Task AnalyzeAsync(int id)
     {
         processing[id] = true;
+        // Clear previous outputs for this transaction so we always re-run fresh
         diagnostics[id] = string.Empty;
+        technicalDetails[id] = string.Empty;
+        showTech.Remove(id);
         StateHasChanged();
 
         try
         {
-            isAnalyzing = true;
             StateHasChanged();
 
-            // Simulate realistic delay so spinner is visible in UI tests
+            // Simulate realistic delay so button spinner is visible in UI tests
             await Task.Delay(2500);
 
-            // Resolve the transaction and attempt to obtain a GUID to pass to the orchestrator.
+            // Resolve the transaction and pass the full entity to the orchestrator.
             var tx = await Db.Transactions.FindAsync(id);
-            Guid txGuid;
-
-            if (tx != null && !string.IsNullOrWhiteSpace(tx.GatewayReference) && Guid.TryParse(tx.GatewayReference, out var parsed))
+            if (tx == null)
             {
-                txGuid = parsed;
+                diagnostics[id] = "Transaction not found.";
             }
             else
             {
-                // Deterministic GUID derived from integer id so tests and UI can produce a stable GUID
-                txGuid = CreateDeterministicGuidForInt(id);
+                try
+                {
+                    var md = await Orchestrator.RunDiagnosticAsync(tx);
+                    diagnostics[id] = md ?? "";
+                    technicalDetails[id] = string.Empty; // clear previous
+                }
+                catch (Exception exInner)
+                {
+                    // Friendly business-facing message
+                    diagnostics[id] = "⚠️ No logramos procesar el diagnóstico inteligente en este momento. Por favor, reintentá en unos instantes.";
+                    // Store the technical details for optional inspection
+                    technicalDetails[id] = exInner.ToString();
+                }
             }
-
-            var md = await Orchestrator.RunDiagnosticAsync(txGuid);
-            diagnostics[id] = md ?? "";
         }
         catch (Exception ex)
         {
-            diagnostics[id] = $"Error running diagnostic: {ex.Message}";
+            diagnostics[id] = "⚠️ No logramos procesar el diagnóstico inteligente en este momento. Por favor, reintentá en unos instantes.";
+            technicalDetails[id] = ex.ToString();
         }
         finally
         {
-            isAnalyzing = false;
             processing[id] = false;
             StateHasChanged();
         }
@@ -210,5 +221,10 @@
         html = html.Replace("\n\n", "<br/><br/>");
         html = html.Replace("- ", "<li>").Replace("\n", "</li>\n");
         return html;
+    }
+
+    private void ToggleTech(Microsoft.AspNetCore.Components.Web.MouseEventArgs e, int id)
+    {
+        if (showTech.Contains(id)) showTech.Remove(id); else showTech.Add(id);
     }
 }
