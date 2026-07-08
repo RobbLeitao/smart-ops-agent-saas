@@ -1,11 +1,22 @@
 .page {
     position: relative;
     display: flex;
-    flex-direction: column;
+    /* Force column layout to avoid leftover reserved sidebar space */
+    flex-direction: column !important;
 }
 
 main {
     flex: 1;
+    width: 100%;
+}
+
+/* Allow article to use full available width */
+article.content {
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0;
+    padding-left: 0.5rem; /* gentle padding */
+    padding-right: 0.5rem;
 }
 
 .sidebar {
