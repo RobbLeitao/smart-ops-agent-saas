@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<OperationLog> OperationLogs => Set<OperationLog>();
+    public DbSet<SmartOps.Core.Entities.Diagnostic> Diagnostics => Set<SmartOps.Core.Entities.Diagnostic>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -65,5 +66,7 @@ public class AppDbContext : DbContext
                 Component = "StripeGateway",
                 Message = "Webhook timeout for transaction TXN_ERR_502. Payment was captured at gateway but status update failed locally."
             });
+
+            // No seed for diagnostics by default; they are created at runtime when operator runs Analyze with IA.
     }
 }

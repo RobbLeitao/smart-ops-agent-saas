@@ -1,17 +1,161 @@
 @page "/diagnostics-history"
+@rendermode InteractiveServer
+@using SmartOps.Core.Entities
+@using Microsoft.EntityFrameworkCore
+@inject SmartOps.Infrastructure.Data.AppDbContext Db
 
-<div class="container-fluid py-5">
-    <div class="diagnostic-card bg-white rounded-2xl shadow-lg border border-gray-200 p-8 my-6 max-w-7xl mx-auto">
-        <h2 class="mb-4">Historial de Diagnósticos</h2>
-        <div class="prose prose-slate max-w-none text-gray-700 leading-relaxed">
-            <p>Estamos trabajando en esta sección. Pronto podrás consultar historiales, aplicar filtros avanzados y auditar diagnósticos realizados por el sistema.</p>
-            <hr />
-            <p>Estado: <strong>En desarrollo</strong> — integración con almacenamiento y búsqueda en cola.</p>
-            <ul>
-                <li>Historial por transacción</li>
-                <li>Búsqueda por ID / usuario / rango de fechas</li>
-                <li>Exportes y auditoría</li>
-            </ul>
+<div class="min-vh-100 py-5" style="background-color:transparent;">
+    <div class="container-fluid">
+        <div class="grid-dark p-4 bg-[#1e2330] rounded-lg" style="background-color:transparent;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h2 class="mb-0 text-slate-200">Historial de Diagnósticos</h2>
+                    <small class="text-slate-400">Registros de diagnósticos generados por el sistema</small>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <input class="form-control bg-[#11151b] border-0 text-slate-200" placeholder="Filtrar por últimos 4 dígitos..." @bind="filterLast4" @bind:event="oninput" maxlength="4" pattern="\d*" inputmode="numeric" style="max-width:320px;" />
+                <small class="text-slate-400">Escriba de 1 a 4 dígitos para filtrar en tiempo real (ej. 4, 43, 4532)</small>
+            </div>
+
+            <div class="table-responsive" style="background:transparent;">
+                <table class="table table-borderless align-middle" style="background:transparent;color:inherit;">
+                    <thead>
+                        <tr class="text-slate-400 small bg-transparent">
+                            <th class="ps-3 text-slate-300">ID Diagnóstico</th>
+                            <th class="text-slate-300">Fecha</th>
+                            <th class="text-slate-300">ID Transacción</th>
+                            <th class="text-slate-300">Error Original</th>
+                            <th class="text-slate-300">Tarjeta</th>
+                            <th class="text-slate-400 text-end pe-3">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (diagnostics == null)
+                        {
+                            <tr><td colspan="5" class="text-slate-400">Cargando...</td></tr>
+                        }
+                        else if (!diagnostics.Any())
+                        {
+                            <tr><td colspan="5" class="text-slate-400">No hay diagnósticos guardados.</td></tr>
+                        }
+                        else
+                        {
+                            foreach (var d in FilteredDiagnostics)
+                            {
+                                <tr class="bg-transparent">
+                                    <td class="ps-3 text-slate-200"><strong>@d.Id</strong></td>
+                                    <td class="text-slate-200">@d.CreatedAt.ToLocalTime().ToString("g")</td>
+                                    <td class="text-slate-200">@d.TransactionId</td>
+                                    <td class="text-slate-200 small">@GetTransactionError(d.TransactionId)</td>
+                                    <td class="text-slate-200 small">@FormatCard(d.CardLast4)</td>
+                                    <td class="text-end pe-3">
+                                        <button class="btn btn-ia" @onclick="() => OpenDiagnostic(d.Id)">Ver Diagnóstico</button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
+
+@* Modal *@
+@if (activeDiagnostic != null)
+{
+    <div class="modal-backdrop fade show" style="position:fixed;inset:0;background:rgba(0,0,0,0.96);backdrop-filter:blur(6px);z-index:1040;"></div>
+    <div class="modal d-block" tabindex="-1" style="position:fixed;inset:0;z-index:1050;">
+        <div class="modal-dialog modal-lg" style="max-width:880px;margin:0;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);"> 
+            <div class="modal-content bg-[#0f1724] text-slate-200" style="border-radius:14px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 8px 40px rgba(0,0,0,0.8);">
+                <div class="modal-header border-0 d-flex align-items-center" style="background:transparent;">
+                    <h5 class="modal-title text-slate-100 mb-0" style="color:black;">Diagnóstico: @activeDiagnostic.Id</h5>
+                    <div class="ms-auto">
+                        <button type="button" class="btn btn-sm" style="background:#e6eef8;color:#0f1724;border-radius:8px;padding:6px 10px;font-weight:600;" @onclick="CloseDiagnostic">Cerrar</button>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <div class="diagnostic-content prose max-w-none" style="font-family:Segoe UI, Roboto, Arial, sans-serif;color:black;">
+                        @((MarkupString)RenderMarkdown(activeDiagnostic.Markdown))
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Diagnostic>? diagnostics;
+    private Diagnostic? activeDiagnostic;
+    private string filterLast4 = string.Empty;
+
+    private IEnumerable<Diagnostic> FilteredDiagnostics
+    {
+        get
+        {
+            var list = diagnostics ?? Enumerable.Empty<Diagnostic>();
+            if (string.IsNullOrWhiteSpace(filterLast4)) return list;
+            // Allow 1-4 numeric digits and filter in real-time (match anywhere in last4 using Contains)
+            if (filterLast4.Length > 4 || !filterLast4.All(char.IsDigit)) return list;
+            return list.Where(d => (d.CardLast4 ?? string.Empty).Contains(filterLast4));
+        }
+    }
+
+    private string FormatCard(string? last4)
+    {
+        if (string.IsNullOrWhiteSpace(last4)) return "-";
+        return $"•••• {last4}";
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        diagnostics = await Db.Diagnostics.OrderByDescending(d => d.CreatedAt).Take(200).ToListAsync();
+    }
+
+    private string GetTransactionError(int txId)
+    {
+        var tx = Db.Transactions.Find(txId);
+        return tx?.ErrorMessage ?? "-";
+    }
+
+    private void OpenDiagnostic(Guid id)
+    {
+        activeDiagnostic = diagnostics?.FirstOrDefault(d => d.Id == id);
+    }
+
+    private void CloseDiagnostic()
+    {
+        activeDiagnostic = null;
+    }
+
+    private string RenderMarkdown(string md)
+    {
+        if (string.IsNullOrWhiteSpace(md)) return string.Empty;
+        var encoded = System.Net.WebUtility.HtmlEncode(md);
+        var lines = encoded.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        var sb = new System.Text.StringBuilder();
+        bool inList = false;
+
+        foreach (var raw in lines)
+        {
+            var line = raw.Trim();
+            if (line.StartsWith("## "))
+            {
+                if (inList) { sb.AppendLine("</ul>"); inList = false; }
+                sb.AppendLine($"<h4>{line.Substring(3).Trim()}</h4>");
+                continue;
+            }
+            if (line.StartsWith("- "))
+            {
+                if (!inList) { sb.AppendLine("<ul style=\"margin-left:1rem;padding-left:1rem\">\n"); inList = true; }
+                sb.AppendLine($"<li>{line.Substring(2).Trim()}</li>");
+                continue;
+            }
+            if (inList) { sb.AppendLine("</ul>"); inList = false; }
+            sb.AppendLine($"<p>{line}</p>");
+        }
+        if (inList) sb.AppendLine("</ul>");
+        return sb.ToString();
+    }
+}
