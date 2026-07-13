@@ -235,6 +235,7 @@ using (var scope = app.Services.CreateScope())
         db.Database.EnsureCreated();
         Program.EnsureColumnExists(db, "Transactions", "CardLast4", "TEXT");
         Program.EnsureColumnExists(db, "Diagnostics", "CardLast4", "TEXT");
+        Program.EnsureColumnExists(db, "Diagnostics", "WasHelpful", "INTEGER");
         Program.BackfillTransactionCards(db);
     }
     catch

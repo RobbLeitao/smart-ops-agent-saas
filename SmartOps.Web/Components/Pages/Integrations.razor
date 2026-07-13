@@ -1,17 +1,147 @@
 @page "/integrations"
+@rendermode InteractiveServer
 
-<div class="container-fluid py-5">
-    <div class="diagnostic-card bg-white rounded-2xl shadow-lg border border-gray-200 p-8 my-6 max-w-7xl mx-auto">
-        <h2 class="mb-4">Configuración de Integraciones</h2>
-        <div class="prose prose-slate max-w-none text-gray-700 leading-relaxed">
-            <p>Se está trabajando en la integración con proveedores externos de IA y pasarelas de pago. Aquí se gestionarán claves, modelos y reglas de conmutación entre simulador y proveedores reales.</p>
-            <hr />
-            <p>Estado: <strong>En desarrollo</strong> — por ahora la aplicación usa el simulador local cuando no hay <code>OpenAI:ApiKey</code> configurada.</p>
-            <ul>
-                <li>Panel para registrar claves y modelos</li>
-                <li>Reglas de conmutación automática</li>
-                <li>Pruebas y logs de integración</li>
-            </ul>
+<div class="min-vh-100 py-5" style="background-color:transparent;">
+    <div class="container-fluid">
+        <div class="grid-dark p-4" style="background-color:#1e2330;">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+                <div>
+                    <h2 class="mb-1 text-slate-100">Configuración de Integraciones</h2>
+                    <small class="text-slate-400">Ajustá el proveedor de IA y la orquestación del motor</small>
+                </div>
+                <span class="badge rounded-pill px-3 py-2" style="background:#13233a;color:#67e8f9;border:1px solid rgba(103,232,249,0.18);">
+                    Microsoft Semantic Kernel - Activo
+                </span>
+            </div>
+
+            <div class="mb-4">
+                <div class="text-cyan-300 small mb-2">Orquestación</div>
+                <div class="p-3 rounded-4" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                        <div>
+                            <div class="text-slate-100 fw-semibold">Motor principal</div>
+                            <div class="text-slate-400 small">La aplicación usa Semantic Kernel para enrutar prompts y herramientas.</div>
+                        </div>
+                        <span class="badge rounded-pill" style="background:#0f2a2c;color:#5eead4;border:1px solid rgba(94,234,212,0.18);">Activo</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <div class="text-cyan-300 small mb-3">Proveedor de IA</div>
+                <div class="row g-3">
+                    <div class="col-lg-6">
+                        <button class="@ProviderCardClass(ModelProvider.Local)" @onclick="() => SelectProvider(ModelProvider.Local)">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="text-slate-100 fw-semibold">Simulador Local</div>
+                                    <div class="text-slate-400 small">Costo $0 · Ideal para desarrollo y pruebas</div>
+                                </div>
+                                <span class="badge rounded-pill" style="background:#1f2937;color:#cbd5e1;">Recomendado</span>
+                            </div>
+                        </button>
+                    </div>
+                    <div class="col-lg-6">
+                        <button class="@ProviderCardClass(ModelProvider.OpenAI)" @onclick="() => SelectProvider(ModelProvider.OpenAI)">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="text-slate-100 fw-semibold">OpenAI API / Azure OpenAI</div>
+                                    <div class="text-slate-400 small">Conecta el modelo real para producción</div>
+                                </div>
+                                <span class="badge rounded-pill" style="background:#13233a;color:#67e8f9;">Producción</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            @if (SelectedProvider == ModelProvider.OpenAI)
+            {
+                <div class="mb-4 p-4 rounded-4" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
+                    <div class="text-cyan-300 small mb-3">Credenciales</div>
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <label class="form-label text-slate-200">API Key</label>
+                            <div class="input-group">
+                                <input class="form-control bg-[#11151b] border-0 text-slate-200" type="@ApiKeyInputType" @bind="ApiKey" placeholder="sk-..." />
+                                <button class="btn btn-outline-secondary" type="button" @onclick="ToggleApiKeyVisibility">
+                                    @(ShowApiKey ? "Ocultar" : "Mostrar")
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <label class="form-label text-slate-200">Model ID</label>
+                            <input class="form-control bg-[#11151b] border-0 text-slate-200" @bind="ModelId" placeholder="gpt-4o" />
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <button class="btn btn-ia px-4" @onclick="SaveConfigurationAsync" disabled="@IsSaving">
+                    @if (IsSaving)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span>Guardando...</span>
+                    }
+                    else
+                    {
+                        <span>Guardar Configuración</span>
+                    }
+                </button>
+                <small class="text-slate-400">La configuración se simula por ahora y queda lista para persistencia real.</small>
+            </div>
+
+            @if (ShowToast)
+            {
+                <div class="mt-4 toast-soft show">
+                    Configuración actualizada correctamente
+                </div>
+            }
         </div>
     </div>
 </div>
+
+@code {
+    private enum ModelProvider
+    {
+        Local,
+        OpenAI
+    }
+
+    private ModelProvider SelectedProvider = ModelProvider.Local;
+    private string ApiKey = string.Empty;
+    private string ModelId = "gpt-4o";
+    private bool ShowApiKey;
+    private bool IsSaving;
+    private bool ShowToast;
+
+    private string ApiKeyInputType => ShowApiKey ? "text" : "password";
+
+    private string ProviderCardClass(ModelProvider provider)
+        => $"integration-card {(SelectedProvider == provider ? "active" : string.Empty)}";
+
+    private void SelectProvider(ModelProvider provider)
+    {
+        SelectedProvider = provider;
+    }
+
+    private void ToggleApiKeyVisibility()
+    {
+        ShowApiKey = !ShowApiKey;
+    }
+
+    private async Task SaveConfigurationAsync()
+    {
+        IsSaving = true;
+        ShowToast = false;
+        StateHasChanged();
+        await Task.Delay(700);
+        IsSaving = false;
+        ShowToast = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        ShowToast = false;
+        StateHasChanged();
+    }
+}

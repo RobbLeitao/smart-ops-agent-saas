@@ -16,7 +16,11 @@
                 <div class="d-flex gap-3">
                     <div class="p-3 bg-[#171c26] rounded shadow-sm text-center" style="min-width:140px;">
                         <div class="text-slate-400 small">Transacciones Fallidas</div>
-                        <div class="h5 mb-0 text-white">@((failedTransactions?.Count) ?? 0)</div>
+                        <div class="h5 mb-0 text-white">@FailedTransactionsCount</div>
+                    </div>
+                    <div class="p-3 bg-[#171c26] rounded shadow-sm text-center" style="min-width:140px;">
+                        <div class="text-slate-400 small">Diagnósticos Realizados</div>
+                        <div class="h5 mb-0 text-white">@DiagnosticsCount</div>
                     </div>
                     <div class="p-3 bg-[#171c26] rounded shadow-sm text-center" style="min-width:140px;">
                         <div class="text-slate-400 small">Estado del Kernel</div>
@@ -123,6 +127,8 @@
 
 @code {
     private List<Transaction>? failedTransactions;
+    private int FailedTransactionsCount;
+    private int DiagnosticsCount;
     private Dictionary<int, bool> processing = new();
     private Dictionary<int, string> diagnostics = new();
     private Dictionary<int, string> technicalDetails = new();
@@ -160,6 +166,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+                await LoadMetricsAsync();
                 // Ensure sample failed transactions exist for UI/demo
                 var existing = await Db.Transactions.AsNoTracking().Where(t => t.Status == "Failed").ToListAsync();
                 var now = DateTime.UtcNow;
@@ -195,6 +202,13 @@
                 }
 
         failedTransactions = await Db.Transactions.Where(t => t.Status == "Failed").OrderByDescending(t => t.OccurredAt).ToListAsync();
+        FailedTransactionsCount = failedTransactions.Count;
+    }
+
+    private async Task LoadMetricsAsync()
+    {
+        FailedTransactionsCount = await Db.Transactions.CountAsync(t => t.Status == "Failed");
+        DiagnosticsCount = await Db.Diagnostics.CountAsync();
     }
 
     private bool IsProcessing(int id) => processing.TryGetValue(id, out var v) && v;
@@ -227,6 +241,7 @@
                 {
                     var md = await Orchestrator.RunDiagnosticAsync(tx);
                                         ShowDiagnostic(id, md ?? "");
+                    DiagnosticsCount = await Db.Diagnostics.CountAsync();
                 }
                 catch (Exception exInner)
                 {

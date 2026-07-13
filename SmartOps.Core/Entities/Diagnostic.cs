@@ -15,5 +15,8 @@ namespace SmartOps.Core.Entities
 
         // Last 4 digits of card at time of transaction (stored for quick filtering)
         public string? CardLast4 { get; set; }
+
+        // Operator feedback: true = helpful, false = not helpful, null = unanswered
+        public bool? WasHelpful { get; set; }
     }
 }

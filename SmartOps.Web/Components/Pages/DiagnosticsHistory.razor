@@ -3,6 +3,7 @@
 @using SmartOps.Core.Entities
 @using Microsoft.EntityFrameworkCore
 @inject SmartOps.Infrastructure.Data.AppDbContext Db
+@inject IJSRuntime JS
 
 <div class="min-vh-100 py-5" style="background-color:transparent;">
     <div class="container-fluid">
@@ -77,14 +78,43 @@
         <div class="modal-dialog modal-lg" style="max-width:880px;margin:0;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);"> 
             <div class="modal-content bg-[#1e2330] text-slate-200" style="border-radius:14px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 8px 40px rgba(0,0,0,0.8);">
                 <div class="modal-header border-0 d-flex align-items-center" style="background:transparent;">
-                    <h5 class="modal-title text-slate-100 mb-0">Diagnóstico: @activeDiagnostic.Id</h5>
+                    <h5 class="modal-title text-slate-100 mb-0" style="color: black">Diagnóstico: @activeDiagnostic.Id</h5>
                     <div class="ms-auto">
                         <button type="button" class="btn btn-sm" style="background:#e6eef8;color:#0f1724;border-radius:8px;padding:6px 10px;font-weight:600;" @onclick="CloseDiagnostic">Cerrar</button>
                     </div>
                 </div>
                 <div class="modal-body">
-                    <div class="diagnostic-content prose max-w-none text-slate-200" style="font-family:Segoe UI, Roboto, Arial, sans-serif;">
+                    <div class="diagnostic-content prose max-w-none text-slate-200" style="color: black; font-family:Segoe UI, Roboto, Arial, sans-serif;">
                         @((MarkupString)RenderMarkdown(activeDiagnostic.Markdown))
+                    </div>
+
+                    <div class="mt-4 p-3 rounded-4" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
+                        <div class="text-cyan-300 small mb-2">Mensaje sugerido para el cliente</div>
+                        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+                            <p class="mb-0 text-slate-200 flex-grow-1">@GetSuggestedMessage(activeDiagnostic.Markdown)</p>
+                            <div class="d-flex align-items-center gap-2">
+                                <button class="btn btn-sm btn-ia" @onclick="CopySuggestedMessageAsync">
+                                    <span class="bi bi-clipboard me-1" aria-hidden="true"></span>
+                                    Copiar Mensaje
+                                </button>
+                                @if (showCopied)
+                                {
+                                    <span class="text-emerald-400 small">¡Copiado!</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 p-3 rounded-4" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
+                        <div class="text-cyan-300 small mb-3">¿El diagnóstico fue útil?</div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <button class="@FeedbackButtonClass(true)" disabled="@IsFeedbackSelected" @onclick="() => RateDiagnosticAsync(true)">👍 Sí</button>
+                            <button class="@FeedbackButtonClass(false)" disabled="@IsFeedbackSelected" @onclick="() => RateDiagnosticAsync(false)">👎 No</button>
+                            @if (showFeedbackSaved)
+                            {
+                                <span class="text-emerald-400 small ms-2">Feedback guardado</span>
+                            }
+                        </div>
                     </div>
                 </div>
             </div>
@@ -96,6 +126,9 @@
     private List<Diagnostic>? diagnostics;
     private Diagnostic? activeDiagnostic;
     private string filterLast4 = string.Empty;
+    private bool showCopied;
+    private bool showFeedbackSaved;
+    private bool isSavingFeedback;
 
     private IEnumerable<Diagnostic> FilteredDiagnostics
     {
@@ -128,11 +161,88 @@
     private void OpenDiagnostic(Guid id)
     {
         activeDiagnostic = diagnostics?.FirstOrDefault(d => d.Id == id);
+        showCopied = false;
+        showFeedbackSaved = false;
     }
 
     private void CloseDiagnostic()
     {
         activeDiagnostic = null;
+        showCopied = false;
+        showFeedbackSaved = false;
+    }
+
+    private string GetSuggestedMessage(string markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown))
+        {
+            return "-";
+        }
+
+        var marker = "## 📨 Mensaje sugerido para el cliente";
+        var index = markdown.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+        {
+            return "-";
+        }
+
+        var content = markdown.Substring(index + marker.Length).Trim();
+        var nextHeading = content.IndexOf("## ", StringComparison.OrdinalIgnoreCase);
+        if (nextHeading >= 0)
+        {
+            content = content.Substring(0, nextHeading).Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(content) ? "-" : content;
+    }
+
+    private async Task CopySuggestedMessageAsync()
+    {
+        if (activeDiagnostic == null)
+        {
+            return;
+        }
+
+        var message = GetSuggestedMessage(activeDiagnostic.Markdown);
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", message);
+        showCopied = true;
+        StateHasChanged();
+        await Task.Delay(1200);
+        showCopied = false;
+        StateHasChanged();
+    }
+
+    private string FeedbackButtonClass(bool helpful)
+    {
+        var active = activeDiagnostic?.WasHelpful == helpful;
+        return active
+            ? "btn btn-sm feedback-btn active"
+            : "btn btn-sm feedback-btn";
+    }
+
+    private bool IsFeedbackSelected => isSavingFeedback || activeDiagnostic?.WasHelpful != null;
+
+    private async Task RateDiagnosticAsync(bool helpful)
+    {
+        if (activeDiagnostic == null || isSavingFeedback)
+        {
+            return;
+        }
+
+        isSavingFeedback = true;
+        activeDiagnostic.WasHelpful = helpful;
+        StateHasChanged();
+
+        var entity = await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == activeDiagnostic.Id);
+        if (entity != null)
+        {
+            entity.WasHelpful = helpful;
+            await Db.SaveChangesAsync();
+        }
+
+        showFeedbackSaved = true;
+        isSavingFeedback = false;
+        StateHasChanged();
     }
 
     private string RenderMarkdown(string md)
