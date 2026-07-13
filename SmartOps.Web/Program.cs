@@ -233,6 +233,9 @@ using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         db.Database.EnsureCreated();
+        Program.EnsureColumnExists(db, "Transactions", "CardLast4", "TEXT");
+        Program.EnsureColumnExists(db, "Diagnostics", "CardLast4", "TEXT");
+        Program.BackfillTransactionCards(db);
     }
     catch
     {
@@ -329,4 +332,67 @@ app.MapPost("/api/webhooks/stripe/{transactionId?}", async (HttpRequest req, str
 app.Run();
 
 // Expose Program to the integration test project
-public partial class Program { }
+public partial class Program
+{
+    public static void EnsureColumnExists(AppDbContext db, string tableName, string columnName, string sqliteType)
+    {
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != System.Data.ConnectionState.Open;
+        if (shouldClose)
+        {
+            connection.Open();
+        }
+
+        try
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = $"PRAGMA table_info({tableName});";
+            using var reader = command.ExecuteReader();
+            var exists = false;
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    exists = true;
+                    break;
+                }
+            }
+
+            if (!exists)
+            {
+                using var alter = connection.CreateCommand();
+                alter.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {sqliteType};";
+                alter.ExecuteNonQuery();
+            }
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                connection.Close();
+            }
+        }
+    }
+
+    public static void BackfillTransactionCards(AppDbContext db)
+    {
+        var transactions = db.Transactions.Where(t => string.IsNullOrWhiteSpace(t.CardLast4)).ToList();
+        if (transactions.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var tx in transactions)
+        {
+            tx.CardLast4 = CreateStableCardLast4(tx.Id);
+        }
+
+        db.SaveChanges();
+    }
+
+    private static string CreateStableCardLast4(int transactionId)
+    {
+        var value = ((transactionId * 137) + 4242) % 10000;
+        return value.ToString("D4");
+    }
+}

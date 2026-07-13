@@ -40,23 +40,25 @@ public class AppDbContext : DbContext
                 Amount = 125.00m,
                 Currency = "USD",
                 Status = "Succeeded",
-                            GatewayReference = "TXN_OK_1001",
-                            Provider = "Stripe",
-                            ErrorMessage = null,
-                            OccurredAt = new DateTime(2026, 6, 1, 12, 0, 0)
-                        },
-                        new Transaction
-                        {
-                            Id = 2,
-                            CustomerId = 1,
-                            Amount = 49.00m,
-                            Currency = "USD",
-                            Status = "Failed",
-                            GatewayReference = "TXN_ERR_502",
-                            Provider = "Stripe",
-                            ErrorMessage = "Card declined",
-                            OccurredAt = new DateTime(2026, 6, 28, 9, 30, 0)
-                        });
+                GatewayReference = "TXN_OK_1001",
+                CardLast4 = "1111",
+                Provider = "Stripe",
+                ErrorMessage = null,
+                OccurredAt = new DateTime(2026, 6, 1, 12, 0, 0)
+            },
+            new Transaction
+            {
+                Id = 2,
+                CustomerId = 1,
+                Amount = 49.00m,
+                Currency = "USD",
+                Status = "Failed",
+                GatewayReference = "TXN_ERR_502",
+                CardLast4 = "4242",
+                Provider = "Stripe",
+                ErrorMessage = "Card declined",
+                OccurredAt = new DateTime(2026, 6, 28, 9, 30, 0)
+            });
 
         modelBuilder.Entity<OperationLog>().HasData(
             new OperationLog

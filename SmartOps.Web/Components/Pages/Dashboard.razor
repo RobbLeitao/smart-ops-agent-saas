@@ -25,9 +25,18 @@
                 </div>
             </div>
 
+            <div class="mb-3">
+                <input class="form-control bg-[#11151b] border-0 text-slate-200" placeholder="Filtrar por últimos 4 dígitos..." @bind="filterLast4" @bind:event="oninput" maxlength="4" pattern="\d*" inputmode="numeric" style="max-width:320px;" />
+                <small class="text-slate-400">Escriba de 1 a 4 dígitos para filtrar en tiempo real (ej. 4, 43, 4532)</small>
+            </div>
+
             @if (failedTransactions == null)
             {
                 <p>Loading...</p>
+            }
+            else if (!FilteredTransactions.Any() && !string.IsNullOrWhiteSpace(filterLast4))
+            {
+                <div class="py-5 text-center text-slate-400">No se encontraron transacciones para la tarjeta ingresada.</div>
             }
             else if (failedTransactions.Count == 0)
             {
@@ -35,25 +44,31 @@
             }
             else
             {
-                    <div class="table-responsive">
+                    <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
                         <table class="table table-borderless align-middle" style="background:transparent;color:inherit;">
                             <thead>
                                                     <tr class="text-slate-400 small">
                                     <th class="ps-3">Id</th>
                                     <th>Amount</th>
                                     <th>Currency</th>
-                                    <th>Error</th>
-                                    <th>OccurredAt</th>
-                                    <th class="text-end pe-3">Actions</th>
-                                </tr>
+                                                        <th>Tarjeta</th>
+                                                        <th>Error</th>
+                                                        <th>OccurredAt</th>
+                                                        <th class="text-end pe-3">Actions</th>
+                                                    </tr>
                             </thead>
                             <tbody>
-                                @foreach (var t in failedTransactions)
+                                @foreach (var t in FilteredTransactions)
                                 {
                                     <tr class="align-middle">
                                         <td class="ps-3"><strong>@t.Id</strong></td>
                                         <td>@t.Amount</td>
                                         <td>@t.Currency</td>
+                                        <td>
+                                            <span class="badge rounded-pill" style="background-color:#2b3440;color:#e6eef8;border:1px solid rgba(255,255,255,0.02);">
+                                                @FormatCard(t.CardLast4)
+                                            </span>
+                                        </td>
                                         <td>
                                             <span class="badge rounded-pill" style="background-color:#2b3440;color:#e6eef8;border:1px solid rgba(255,255,255,0.02);">Failed</span>
                                                                                         <div class="text-slate-400 small">@t.ErrorMessage</div>
@@ -76,7 +91,7 @@
                                     if (diagnostics.TryGetValue(t.Id, out var md) && !string.IsNullOrWhiteSpace(md))
                                     {
                                         <tr>
-                                            <td colspan="6">
+                                            <td colspan="7">
                                                 <div class="diagnostic-gem position-relative my-6 animate-fade-in max-w-7xl mx-auto">
                                                                                                                                                     <button type="button" class="btn-close position-absolute" style="right:12px;top:12px;filter:invert(1);" aria-label="Close" @onclick="() => CloseDiagnostic(t.Id)"></button>
                                                                                                                                                     <div class="diagnostic-content prose max-w-none leading-relaxed" style="font-family:Segoe UI, Roboto, Arial, sans-serif;">
@@ -112,23 +127,55 @@
     private Dictionary<int, string> diagnostics = new();
     private Dictionary<int, string> technicalDetails = new();
     private HashSet<int> showTech = new();
+    private string filterLast4 = string.Empty;
+
+    private static string FormatCard(string? last4)
+    {
+        if (string.IsNullOrWhiteSpace(last4))
+        {
+            return "-";
+        }
+
+        return $"•••• {last4}";
+    }
+
+    private IEnumerable<Transaction> FilteredTransactions
+    {
+        get
+        {
+            var list = failedTransactions ?? Enumerable.Empty<Transaction>();
+            if (string.IsNullOrWhiteSpace(filterLast4))
+            {
+                return list;
+            }
+
+            if (filterLast4.Length > 4 || !filterLast4.All(char.IsDigit))
+            {
+                return list;
+            }
+
+            return list.Where(t => (t.CardLast4 ?? string.Empty).Contains(filterLast4));
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
                 // Ensure sample failed transactions exist for UI/demo
-                var existing = await Db.Transactions.Where(t => t.Status == "Failed").ToListAsync();
+                var existing = await Db.Transactions.AsNoTracking().Where(t => t.Status == "Failed").ToListAsync();
                 var now = DateTime.UtcNow;
                 const int target = 8; // ensure more volume
                 if (existing == null) existing = new List<SmartOps.Core.Entities.Transaction>();
                 var toAdd = new List<SmartOps.Core.Entities.Transaction>();
                 var sampleErrors = new[] { "Card declined", "Expired card", "Insufficient funds", "Processing error", "Suspected fraud", "Invalid CVC" };
+                var nextId = existing.Count == 0 ? 1 : existing.Max(t => t.Id) + 1;
                 int seedIndex = 0;
                 while (existing.Count + toAdd.Count < target)
                 {
                     var amt = 10m + (seedIndex * 5);
                     var currency = (seedIndex % 2 == 0) ? "USD" : "EUR";
                     var err = sampleErrors[seedIndex % sampleErrors.Length];
-                    toAdd.Add(new SmartOps.Core.Entities.Transaction { CustomerId = 1, Amount = Math.Round(amt,2), Currency = currency, ErrorMessage = err, Status = "Failed", OccurredAt = now.AddMinutes(-(seedIndex+1)*15) });
+                    var last4 = ((seedIndex * 137) + 4242) % 10000;
+                    toAdd.Add(new SmartOps.Core.Entities.Transaction { Id = nextId + seedIndex, CustomerId = 1, Amount = Math.Round(amt,2), Currency = currency, ErrorMessage = err, Status = "Failed", CardLast4 = last4.ToString("D4"), OccurredAt = now.AddMinutes(-(seedIndex+1)*15) });
                     seedIndex++;
                 }
 

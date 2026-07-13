@@ -19,30 +19,36 @@
                 <small class="text-slate-400">Escriba de 1 a 4 dígitos para filtrar en tiempo real (ej. 4, 43, 4532)</small>
             </div>
 
-            <div class="table-responsive" style="background:transparent;">
-                <table class="table table-borderless align-middle" style="background:transparent;color:inherit;">
-                    <thead>
-                        <tr class="text-slate-400 small bg-transparent">
-                            <th class="ps-3 text-slate-300">ID Diagnóstico</th>
-                            <th class="text-slate-300">Fecha</th>
-                            <th class="text-slate-300">ID Transacción</th>
-                            <th class="text-slate-300">Error Original</th>
-                            <th class="text-slate-300">Tarjeta</th>
-                            <th class="text-slate-400 text-end pe-3">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (diagnostics == null)
-                        {
-                            <tr><td colspan="5" class="text-slate-400">Cargando...</td></tr>
-                        }
-                        else if (!diagnostics.Any())
-                        {
-                            <tr><td colspan="5" class="text-slate-400">No hay diagnósticos guardados.</td></tr>
-                        }
-                        else
-                        {
-                            foreach (var d in FilteredDiagnostics)
+            <div class="table-responsive" style="background:transparent;max-height:400px;overflow-y:auto;">
+                @if (diagnostics == null)
+                {
+                    <div class="py-4 text-slate-400">Cargando...</div>
+                }
+                else if (!diagnostics.Any())
+                {
+                    <div class="py-4 text-slate-400">No hay diagnósticos guardados.</div>
+                }
+                else if (!FilteredDiagnostics.Any() && !string.IsNullOrWhiteSpace(filterLast4))
+                {
+                    <div class="min-h-[240px] flex items-center justify-center text-center">
+                        <p class="text-slate-400 mb-0">No se encontraron diagnósticos para la tarjeta ingresada.</p>
+                    </div>
+                }
+                else
+                {
+                    <table class="table table-borderless align-middle" style="background:transparent;color:inherit;">
+                        <thead>
+                            <tr class="text-slate-400 small bg-transparent">
+                                <th class="ps-3 text-slate-300">ID Diagnóstico</th>
+                                <th class="text-slate-300">Fecha</th>
+                                <th class="text-slate-300">ID Transacción</th>
+                                <th class="text-slate-300">Error Original</th>
+                                <th class="text-slate-300">Tarjeta</th>
+                                <th class="text-slate-400 text-end pe-3">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var d in FilteredDiagnostics)
                             {
                                 <tr class="bg-transparent">
                                     <td class="ps-3 text-slate-200"><strong>@d.Id</strong></td>
@@ -55,9 +61,9 @@
                                     </td>
                                 </tr>
                             }
-                        }
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                }
             </div>
         </div>
     </div>
@@ -69,15 +75,15 @@
     <div class="modal-backdrop fade show" style="position:fixed;inset:0;background:rgba(0,0,0,0.96);backdrop-filter:blur(6px);z-index:1040;"></div>
     <div class="modal d-block" tabindex="-1" style="position:fixed;inset:0;z-index:1050;">
         <div class="modal-dialog modal-lg" style="max-width:880px;margin:0;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);"> 
-            <div class="modal-content bg-[#0f1724] text-slate-200" style="border-radius:14px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 8px 40px rgba(0,0,0,0.8);">
+            <div class="modal-content bg-[#1e2330] text-slate-200" style="border-radius:14px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 8px 40px rgba(0,0,0,0.8);">
                 <div class="modal-header border-0 d-flex align-items-center" style="background:transparent;">
-                    <h5 class="modal-title text-slate-100 mb-0" style="color:black;">Diagnóstico: @activeDiagnostic.Id</h5>
+                    <h5 class="modal-title text-slate-100 mb-0">Diagnóstico: @activeDiagnostic.Id</h5>
                     <div class="ms-auto">
                         <button type="button" class="btn btn-sm" style="background:#e6eef8;color:#0f1724;border-radius:8px;padding:6px 10px;font-weight:600;" @onclick="CloseDiagnostic">Cerrar</button>
                     </div>
                 </div>
                 <div class="modal-body">
-                    <div class="diagnostic-content prose max-w-none" style="font-family:Segoe UI, Roboto, Arial, sans-serif;color:black;">
+                    <div class="diagnostic-content prose max-w-none text-slate-200" style="font-family:Segoe UI, Roboto, Arial, sans-serif;">
                         @((MarkupString)RenderMarkdown(activeDiagnostic.Markdown))
                     </div>
                 </div>

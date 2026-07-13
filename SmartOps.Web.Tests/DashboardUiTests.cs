@@ -22,9 +22,9 @@ namespace SmartOps.Web.Tests
             // Seed sample failed transactions
             var now = System.DateTime.UtcNow;
             db.Transactions.AddRange(new[] {
-                new SmartOps.Core.Entities.Transaction { Id = 2, Amount = 49.00m, Currency = "USD", ErrorMessage = "Card declined", Status = "Failed", OccurredAt = now.AddMinutes(-30) },
-                new SmartOps.Core.Entities.Transaction { Id = 3, Amount = 120.00m, Currency = "EUR", ErrorMessage = "Expired card", Status = "Failed", OccurredAt = now.AddHours(-2) },
-                new SmartOps.Core.Entities.Transaction { Id = 4, Amount = 15.50m, Currency = "USD", ErrorMessage = "Insufficient funds", Status = "Failed", OccurredAt = now.AddDays(-1) }
+                new SmartOps.Core.Entities.Transaction { Id = 2, Amount = 49.00m, Currency = "USD", CardLast4 = "4242", ErrorMessage = "Card declined", Status = "Failed", OccurredAt = now.AddMinutes(-30) },
+                new SmartOps.Core.Entities.Transaction { Id = 3, Amount = 120.00m, Currency = "EUR", CardLast4 = "1111", ErrorMessage = "Expired card", Status = "Failed", OccurredAt = now.AddHours(-2) },
+                new SmartOps.Core.Entities.Transaction { Id = 4, Amount = 15.50m, Currency = "USD", CardLast4 = "2222", ErrorMessage = "Insufficient funds", Status = "Failed", OccurredAt = now.AddDays(-1) }
             });
             db.SaveChanges();
 
@@ -48,6 +48,7 @@ namespace SmartOps.Web.Tests
 
             // Basic assertion: button existed and click executed without throwing. Spinner visual is validated manually in browser.
             Assert.NotNull(button);
+            Assert.Contains("•••• 4242", comp.Markup);
 
             // Now complete the operation to ensure the fake task completes cleanly
             tcs.SetResult("## 🔍 Simulated result\n\n- ok");
