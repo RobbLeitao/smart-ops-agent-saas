@@ -5,6 +5,53 @@
 @inject SmartOps.Infrastructure.Data.AppDbContext Db
 @inject IJSRuntime JS
 
+<style>
+    /* Modal and feedback UI tweaks */
+    .feedback-btn { background: transparent; color: #cbd5e1; border: 1px solid rgba(148,163,184,0.08); padding:6px 10px; border-radius:8px; font-weight:600; }
+    .feedback-btn.active { background: rgba(99,102,241,0.12); color: #f1f5f9; border-color: rgba(99,102,241,0.22); }
+    .feedback-thanks { opacity: 1; transition: opacity 400ms ease-in-out; }
+
+    /* Export buttons in modal header */
+    .export-btn { background: transparent; color: #0f1724; border: 1px solid rgba(15,23,36,0.06); border-radius:8px; padding:6px 10px; font-weight:600; }
+    .export-btn:hover { color: #0b1220; border-color: rgba(15,23,36,0.12); }
+    /* Make the eye (view) button match export buttons style */
+    .btn-ia {
+        background: transparent !important;
+        color: #0f1724 !important;
+        border: 1px solid rgba(148,163,184,0.12) !important;
+        border-radius: 8px !important;
+        padding: 6px 10px !important;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: none !important;
+    }
+    .btn-ia .bi { color: #0f1724 !important; }
+    .btn-ia:hover { color: #0b1220 !important; border-color: rgba(15,23,36,0.22) !important; background: rgba(255,255,255,0.02) !important; }
+
+    /* In dark panels, make action buttons (copy) visible with primary style */
+    .dark-panel .btn-ia {
+        background: #635bff !important; /* purple primary */
+        color: #ffffff !important;
+        border: none !important;
+        padding: 6px 12px !important;
+        border-radius: 8px !important;
+    }
+    .dark-panel .btn-ia .bi { color: #ffffff !important; }
+    .dark-panel .btn-ia:hover { background: #4a43d1 !important; }
+
+    /* Fixed width for copy button to avoid layout shift */
+    .copy-btn { width: 140px; min-width: 140px; justify-content: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } .copy-btn .bi { margin-right: 8px; }
+
+    .modal-header .modal-title { flex: 0 1 auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .modal-header .ms-auto { flex: 1 0 auto; justify-content: flex-end; }
+
+    /* Dark panel: ensure text inside dark background areas is white */
+    .dark-panel { color: #ffffff !important; }
+    .dark-panel p, .dark-panel small, .dark-panel h4, .dark-panel h5, .dark-panel li { color: #ffffff !important; }
+</style>
+
 <div class="min-vh-100 py-5" style="background-color:transparent;">
     <div class="container-fluid">
         <div class="grid-dark p-4 bg-[#1e2330] rounded-lg" style="background-color:transparent;">
@@ -57,8 +104,10 @@
                                     <td class="text-slate-200">@d.TransactionId</td>
                                     <td class="text-slate-200 small">@GetTransactionError(d.TransactionId)</td>
                                     <td class="text-slate-200 small">@FormatCard(d.CardLast4)</td>
-                                    <td class="text-end pe-3">
-                                        <button class="btn btn-ia" @onclick="() => OpenDiagnostic(d.Id)">Ver Diagnóstico</button>
+                                    <td class="text-end pe-3 d-flex align-items-center gap-2">
+                                        <button class="btn btn-ia" data-bs-toggle="tooltip" title="Ver diagnóstico" @onclick="() => OpenDiagnostic(d.Id)"><span class="bi bi-eye" aria-hidden="true"></span></button>
+                                        <button class="btn btn-sm export-btn" data-bs-toggle="tooltip" title="Descargar JSON" @onclick="() => DownloadDiagnosticJsonByIdAsync(d.Id)"><span class="bi bi-download" aria-hidden="true"></span></button>
+                                        <button class="btn btn-sm export-btn" data-bs-toggle="tooltip" title="Descargar PDF" @onclick="() => ExportDiagnosticPdfByIdAsync(d.Id)"><span class="bi bi-printer" aria-hidden="true"></span></button>
                                     </td>
                                 </tr>
                             }
@@ -76,43 +125,41 @@
     <div class="modal-backdrop fade show" style="position:fixed;inset:0;background:rgba(0,0,0,0.96);backdrop-filter:blur(6px);z-index:1040;"></div>
     <div class="modal d-block" tabindex="-1" style="position:fixed;inset:0;z-index:1050;">
         <div class="modal-dialog modal-lg" style="max-width:880px;margin:0;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);"> 
-            <div class="modal-content bg-[#1e2330] text-slate-200" style="border-radius:14px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 8px 40px rgba(0,0,0,0.8);">
+            <div class="modal-content bg-[#1e2330] text-black" style="border-radius:14px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 8px 40px rgba(0,0,0,0.8);">
                 <div class="modal-header border-0 d-flex align-items-center" style="background:transparent;">
-                    <h5 class="modal-title text-slate-100 mb-0" style="color: black">Diagnóstico: @activeDiagnostic.Id</h5>
-                    <div class="ms-auto">
+                    <h5 class="modal-title text-slate-100 mb-0">Diagnóstico: @activeDiagnostic.Id</h5>
+                    <div class="ms-auto d-flex align-items-center gap-2">
+                        <button class="btn btn-sm export-btn" data-bs-toggle="tooltip" title="Descargar JSON" @onclick="DownloadDiagnosticJsonAsync"><span class="bi bi-download me-1" aria-hidden="true"></span>JSON</button>
+                        <button class="btn btn-sm export-btn" data-bs-toggle="tooltip" title="Descargar PDF" @onclick="ExportDiagnosticPdfAsync"><span class="bi bi-printer me-1" aria-hidden="true"></span>PDF</button>
                         <button type="button" class="btn btn-sm" style="background:#e6eef8;color:#0f1724;border-radius:8px;padding:6px 10px;font-weight:600;" @onclick="CloseDiagnostic">Cerrar</button>
                     </div>
                 </div>
                 <div class="modal-body">
-                    <div class="diagnostic-content prose max-w-none text-slate-200" style="color: black; font-family:Segoe UI, Roboto, Arial, sans-serif;">
+                    <div class="diagnostic-content prose max-w-none text-slate-200" style="font-family:Segoe UI, Roboto, Arial, sans-serif;">
                         @((MarkupString)RenderMarkdown(activeDiagnostic.Markdown))
                     </div>
 
-                    <div class="mt-4 p-3 rounded-4" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
+                    <div class="mt-4 p-3 rounded-4 dark-panel" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
                         <div class="text-cyan-300 small mb-2">Mensaje sugerido para el cliente</div>
                         <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
                             <p class="mb-0 text-slate-200 flex-grow-1">@GetSuggestedMessage(activeDiagnostic.Markdown)</p>
                             <div class="d-flex align-items-center gap-2">
-                                <button class="btn btn-sm btn-ia" @onclick="CopySuggestedMessageAsync">
+                                <button class="btn btn-sm btn-ia copy-btn" @onclick="CopySuggestedMessageAsync">
                                     <span class="bi bi-clipboard me-1" aria-hidden="true"></span>
-                                    Copiar Mensaje
+                                    @(showCopied ? "¡Copiado!" : "Copiar Mensaje")
                                 </button>
-                                @if (showCopied)
-                                {
-                                    <span class="text-emerald-400 small">¡Copiado!</span>
-                                }
                             </div>
                         </div>
                     </div>
 
-                    <div class="mt-4 p-3 rounded-4" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
+                    <div class="mt-4 p-3 rounded-4 dark-panel" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
                         <div class="text-cyan-300 small mb-3">¿El diagnóstico fue útil?</div>
                         <div class="d-flex align-items-center gap-2 flex-wrap">
                             <button class="@FeedbackButtonClass(true)" disabled="@IsFeedbackSelected" @onclick="() => RateDiagnosticAsync(true)">👍 Sí</button>
                             <button class="@FeedbackButtonClass(false)" disabled="@IsFeedbackSelected" @onclick="() => RateDiagnosticAsync(false)">👎 No</button>
-                            @if (showFeedbackSaved)
+                            @if (showFeedbackThanks)
                             {
-                                <span class="text-emerald-400 small ms-2">Feedback guardado</span>
+                                <span class="text-emerald-400 small ms-2 feedback-thanks">¡Gracias por tu feedback!</span>
                             }
                         </div>
                     </div>
@@ -123,11 +170,14 @@
 }
 
 @code {
+    // JS helpers for download/print are injected below in the page markup
+
     private List<Diagnostic>? diagnostics;
     private Diagnostic? activeDiagnostic;
     private string filterLast4 = string.Empty;
     private bool showCopied;
     private bool showFeedbackSaved;
+    private bool showFeedbackThanks;
     private bool isSavingFeedback;
 
     private IEnumerable<Diagnostic> FilteredDiagnostics
@@ -214,13 +264,12 @@
 
     private string FeedbackButtonClass(bool helpful)
     {
-        var active = activeDiagnostic?.WasHelpful == helpful;
-        return active
-            ? "btn btn-sm feedback-btn active"
-            : "btn btn-sm feedback-btn";
+        var active = activeDiagnostic != null && activeDiagnostic.WasHelpful == helpful;
+        // base classes + highlight when active
+        return active ? "btn btn-sm feedback-btn active" : "btn btn-sm feedback-btn";
     }
 
-    private bool IsFeedbackSelected => isSavingFeedback || activeDiagnostic?.WasHelpful != null;
+    private bool IsFeedbackSelected => isSavingFeedback || (activeDiagnostic != null && activeDiagnostic.WasHelpful != null);
 
     private async Task RateDiagnosticAsync(bool helpful)
     {
@@ -229,20 +278,36 @@
             return;
         }
 
+        // Immediate UI reaction: mark selection and show thanks message while saving in background
         isSavingFeedback = true;
         activeDiagnostic.WasHelpful = helpful;
+        showFeedbackThanks = true;
         StateHasChanged();
 
-        var entity = await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == activeDiagnostic.Id);
-        if (entity != null)
+                // Persist asynchronously but do not block the UI reaction
+        try
         {
-            entity.WasHelpful = helpful;
-            await Db.SaveChangesAsync();
+            var entity = await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == activeDiagnostic.Id);
+            if (entity != null)
+            {
+                entity.WasHelpful = helpful;
+                await Db.SaveChangesAsync();
+            }
+            showFeedbackSaved = true;
         }
-
-        showFeedbackSaved = true;
-        isSavingFeedback = false;
-        StateHasChanged();
+        catch
+        {
+            // Ignore persistence errors for now; keep UI reaction. Could surface later.
+        }
+        finally
+        {
+            isSavingFeedback = false;
+            StateHasChanged();
+            // Auto-hide thanks after a short delay to mimic fade-out
+            await Task.Delay(1600);
+            showFeedbackThanks = false;
+            StateHasChanged();
+        }
     }
 
     private string RenderMarkdown(string md)
@@ -274,4 +339,155 @@
         if (inList) sb.AppendLine("</ul>");
         return sb.ToString();
     }
+
+    private async Task DownloadDiagnosticJsonAsync()
+    {
+        if (activeDiagnostic == null) return;
+
+        var payload = new
+        {
+            id = activeDiagnostic.Id,
+            createdAt = activeDiagnostic.CreatedAt,
+            transactionId = activeDiagnostic.TransactionId,
+            cardLast4 = activeDiagnostic.CardLast4,
+            markdown = activeDiagnostic.Markdown,
+            summary = activeDiagnostic.Summary,
+            suggestedMessage = GetSuggestedMessage(activeDiagnostic.Markdown)
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var filename = $"diagnostico-{activeDiagnostic.TransactionId}.json";
+        await JS.InvokeVoidAsync("smartOpsDownloadFile", filename, "application/json", json);
+    }
+
+    private async Task ExportDiagnosticPdfAsync()
+    {
+        if (activeDiagnostic == null) return;
+
+        // Build printable HTML using a StringBuilder to avoid Razor parsing issues.
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<!doctype html>");
+        sb.AppendLine("<html>");
+        sb.AppendLine("<head>");
+        sb.AppendLine("<meta charset='utf-8' />");
+        sb.AppendLine($"<title>Diagnóstico {activeDiagnostic.Id}</title>");
+        sb.AppendLine("<style>");
+        sb.AppendLine("body { background: #1e2330; color: #e6eef8; font-family: Segoe UI, Roboto, Arial, sans-serif; padding: 20px; }");
+        sb.AppendLine(".box { background: #0f1724; padding: 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.04); }");
+        sb.AppendLine("h1 { font-size: 18px; margin: 0 0 8px 0; }");
+        sb.AppendLine("</style>");
+        sb.AppendLine("</head>");
+        sb.AppendLine("<body>");
+        sb.AppendLine("<div class='box'>");
+        sb.AppendLine($"<h1>Diagnóstico: {activeDiagnostic.Id}</h1>");
+        sb.AppendLine($"<p><strong>Fecha:</strong> {activeDiagnostic.CreatedAt.ToLocalTime():g}</p>");
+        sb.AppendLine($"<p><strong>ID Transacción:</strong> {activeDiagnostic.TransactionId}</p>");
+        sb.AppendLine($"<p><strong>Tarjeta:</strong> {FormatCard(activeDiagnostic.CardLast4)}</p>");
+        sb.AppendLine("<hr/>");
+        sb.AppendLine($"<div>{System.Net.WebUtility.HtmlEncode(activeDiagnostic.Markdown).Replace("\n", "<br/>")}</div>");
+        sb.AppendLine("</div>");
+        sb.AppendLine("</body>");
+        sb.AppendLine("</html>");
+
+        var html = sb.ToString();
+        await JS.InvokeVoidAsync("smartOpsOpenPrintView", html);
+    }
+
+    private async Task DownloadDiagnosticJsonByIdAsync(Guid id)
+    {
+        var diag = diagnostics?.FirstOrDefault(d => d.Id == id) ?? await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == id);
+        if (diag == null) return;
+
+        var payload = new
+        {
+            id = diag.Id,
+            createdAt = diag.CreatedAt,
+            transactionId = diag.TransactionId,
+            cardLast4 = diag.CardLast4,
+            markdown = diag.Markdown,
+            summary = diag.Summary,
+            suggestedMessage = GetSuggestedMessage(diag.Markdown)
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        var filename = $"diagnostico-{diag.TransactionId}.json";
+        await JS.InvokeVoidAsync("smartOpsDownloadFile", filename, "application/json", json);
+    }
+
+    private async Task ExportDiagnosticPdfByIdAsync(Guid id)
+    {
+        var diag = diagnostics?.FirstOrDefault(d => d.Id == id) ?? await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == id);
+        if (diag == null) return;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("<!doctype html>");
+        sb.AppendLine("<html>");
+        sb.AppendLine("<head>");
+        sb.AppendLine("<meta charset='utf-8' />");
+        sb.AppendLine($"<title>Diagnóstico {diag.Id}</title>");
+        sb.AppendLine("<style>");
+        sb.AppendLine("body { background: #1e2330; color: #000000; font-family: Segoe UI, Roboto, Arial, sans-serif; padding: 20px; }");
+        sb.AppendLine(".box { background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.06); }");
+        sb.AppendLine("h1 { font-size: 18px; margin: 0 0 8px 0; color:#0f1724 }");
+        sb.AppendLine("</style>");
+        sb.AppendLine("</head>");
+        sb.AppendLine("<body>");
+        sb.AppendLine("<div class='box'>");
+        sb.AppendLine($"<h1>Diagnóstico: {diag.Id}</h1>");
+        sb.AppendLine($"<p><strong>Fecha:</strong> {diag.CreatedAt.ToLocalTime():g}</p>");
+        sb.AppendLine($"<p><strong>ID Transacción:</strong> {diag.TransactionId}</p>");
+        sb.AppendLine($"<p><strong>Tarjeta:</strong> {FormatCard(diag.CardLast4)}</p>");
+        sb.AppendLine("<hr/>");
+        sb.AppendLine($"<div>{System.Net.WebUtility.HtmlEncode(diag.Markdown).Replace("\n", "<br/>")}</div>");
+        sb.AppendLine("</div>");
+        sb.AppendLine("</body>");
+        sb.AppendLine("</html>");
+
+        var html = sb.ToString();
+        await JS.InvokeVoidAsync("smartOpsOpenPrintView", html);
+    }
 }
+
+@* Inline JS helpers *@
+<script>
+    window.smartOpsDownloadFile = function (filename, mime, content) {
+        try {
+            const blob = new Blob([content], { type: mime });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
+        } catch (e) {
+            console.error('Download failed', e);
+        }
+    };
+
+    window.smartOpsOpenPrintView = function (htmlContent) {
+        const w = window.open('', '_blank');
+        if (!w) {
+            alert('No se pudo abrir la ventana de impresión. Permitir ventanas emergentes?');
+            return;
+        }
+        w.document.open();
+        w.document.write(htmlContent);
+        w.document.close();
+        setTimeout(() => w.print(), 500);
+    };
+</script>
+
+<script>
+    // Initialize Bootstrap tooltips for this page's buttons
+    document.addEventListener('DOMContentLoaded', function () {
+        try {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.forEach(function (el) { new bootstrap.Tooltip(el); });
+        } catch (e) {
+            // bootstrap may not be present; ignore silently
+            console.debug('Bootstrap tooltip init failed', e);
+        }
+    });
+</script>
