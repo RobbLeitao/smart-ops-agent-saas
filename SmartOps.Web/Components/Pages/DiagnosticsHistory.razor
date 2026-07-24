@@ -208,9 +208,15 @@
         return tx?.ErrorMessage ?? "-";
     }
 
-    private void OpenDiagnostic(Guid id)
+    private async void OpenDiagnostic(Guid id)
     {
-        activeDiagnostic = diagnostics?.FirstOrDefault(d => d.Id == id);
+        // Reload from DB to ensure persisted feedback state is available
+        activeDiagnostic = await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == id);
+        // Fallback to in-memory list if not found
+        if (activeDiagnostic == null)
+        {
+            activeDiagnostic = diagnostics?.FirstOrDefault(d => d.Id == id);
+        }
         showCopied = false;
         showFeedbackSaved = false;
     }
@@ -264,12 +270,12 @@
 
     private string FeedbackButtonClass(bool helpful)
     {
-        var active = activeDiagnostic != null && activeDiagnostic.WasHelpful == helpful;
+        var active = activeDiagnostic != null && activeDiagnostic.IsUseful == helpful;
         // base classes + highlight when active
         return active ? "btn btn-sm feedback-btn active" : "btn btn-sm feedback-btn";
     }
 
-    private bool IsFeedbackSelected => isSavingFeedback || (activeDiagnostic != null && activeDiagnostic.WasHelpful != null);
+    private bool IsFeedbackSelected => isSavingFeedback || (activeDiagnostic != null && activeDiagnostic.IsUseful != null);
 
     private async Task RateDiagnosticAsync(bool helpful)
     {
@@ -280,17 +286,19 @@
 
         // Immediate UI reaction: mark selection and show thanks message while saving in background
         isSavingFeedback = true;
-        activeDiagnostic.WasHelpful = helpful;
+        activeDiagnostic.IsUseful = helpful;
+        activeDiagnostic.WasHelpful = helpful; // keep legacy field in sync
         showFeedbackThanks = true;
         StateHasChanged();
 
-                // Persist asynchronously but do not block the UI reaction
+        // Persist asynchronously but do not block the UI reaction
         try
         {
             var entity = await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == activeDiagnostic.Id);
             if (entity != null)
             {
-                entity.WasHelpful = helpful;
+                entity.IsUseful = helpful;
+                entity.WasHelpful = helpful; // backward compatibility
                 await Db.SaveChangesAsync();
             }
             showFeedbackSaved = true;

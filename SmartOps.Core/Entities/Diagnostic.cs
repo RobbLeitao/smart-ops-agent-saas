@@ -18,5 +18,8 @@ namespace SmartOps.Core.Entities
 
         // Operator feedback: true = helpful, false = not helpful, null = unanswered
         public bool? WasHelpful { get; set; }
+
+        // New field for persisted usefulness flag (Hito 20)
+        public bool? IsUseful { get; set; }
     }
 }
