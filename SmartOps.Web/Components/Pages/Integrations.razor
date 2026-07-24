@@ -131,17 +131,66 @@
         ShowApiKey = !ShowApiKey;
     }
 
+    protected override async Task OnInitializedAsync()
+    {
+        // Load saved settings from DB (Settings key-value)
+        try
+        {
+            using var conn = Db.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open) conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT Value FROM Settings WHERE Key = @k";
+            var p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.Provider"; cmd.Parameters.Add(p);
+            var val = cmd.ExecuteScalar() as string;
+            if (!string.IsNullOrWhiteSpace(val) && Enum.TryParse<ModelProvider>(val, out var prov)) SelectedProvider = prov;
+
+            cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.ApiKey"; cmd.Parameters.Add(p);
+            val = cmd.ExecuteScalar() as string; if (!string.IsNullOrWhiteSpace(val)) ApiKey = val;
+
+            cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.ModelId"; cmd.Parameters.Add(p);
+            val = cmd.ExecuteScalar() as string; if (!string.IsNullOrWhiteSpace(val)) ModelId = val;
+        }
+        catch
+        {
+            // ignore load errors
+        }
+    }
+
     private async Task SaveConfigurationAsync()
     {
         IsSaving = true;
         ShowToast = false;
         StateHasChanged();
-        await Task.Delay(700);
-        IsSaving = false;
-        ShowToast = true;
-        StateHasChanged();
-        await Task.Delay(2000);
-        ShowToast = false;
-        StateHasChanged();
+
+        try
+        {
+            using var conn = Db.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open) conn.Open();
+            using var tran = conn.BeginTransaction();
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tran;
+            cmd.CommandText = "INSERT OR REPLACE INTO Settings (Key,Value) VALUES (@k,@v);";
+            var pK = cmd.CreateParameter(); pK.ParameterName = "@k"; cmd.Parameters.Add(pK);
+            var pV = cmd.CreateParameter(); pV.ParameterName = "@v"; cmd.Parameters.Add(pV);
+
+            pK.Value = "Integrations.Provider"; pV.Value = SelectedProvider.ToString(); cmd.ExecuteNonQuery();
+            pK.Value = "Integrations.ApiKey"; pV.Value = ApiKey ?? string.Empty; cmd.ExecuteNonQuery();
+            pK.Value = "Integrations.ModelId"; pV.Value = ModelId ?? string.Empty; cmd.ExecuteNonQuery();
+
+            tran.Commit();
+            ShowToast = true;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Failed to save integrations settings: {ex}");
+        }
+        finally
+        {
+            IsSaving = false;
+            StateHasChanged();
+            await Task.Delay(1500);
+            ShowToast = false;
+            StateHasChanged();
+        }
     }
 }

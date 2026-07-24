@@ -238,6 +238,18 @@ using (var scope = app.Services.CreateScope())
         Program.EnsureColumnExists(db, "Diagnostics", "WasHelpful", "INTEGER");
         Program.EnsureColumnExists(db, "Diagnostics", "IsUseful", "INTEGER");
         Program.BackfillTransactionCards(db);
+        // Ensure a simple key-value settings table exists for runtime persistence of integrations/configuration
+        try
+        {
+            using var cmd = db.Database.GetDbConnection().CreateCommand();
+            if (cmd.Connection.State != System.Data.ConnectionState.Open) cmd.Connection.Open();
+            cmd.CommandText = "CREATE TABLE IF NOT EXISTS Settings (Key TEXT PRIMARY KEY, Value TEXT);";
+            cmd.ExecuteNonQuery();
+        }
+        catch
+        {
+            // ignore
+        }
     }
     catch
     {
