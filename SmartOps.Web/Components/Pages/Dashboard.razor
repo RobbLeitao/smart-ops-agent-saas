@@ -26,6 +26,10 @@
                         <div class="text-slate-400 small">Estado del Kernel</div>
                         <div class="h5 mb-0 text-emerald-400">Activo</div>
                     </div>
+                    <div class="p-3 bg-[#171c26] rounded shadow-sm text-center" style="min-width:140px;">
+                        <div class="text-slate-400 small">% Diagnósticos Útiles</div>
+                        <div class="h5 mb-0 text-white">@UsefulPercentDisplay</div>
+                    </div>
                 </div>
             </div>
 
@@ -205,10 +209,25 @@
         FailedTransactionsCount = failedTransactions.Count;
     }
 
+    private int UsefulPercent;
+    private string UsefulPercentDisplay => UsefulPercent < 0 ? "N/A" : UsefulPercent + "%";
+
     private async Task LoadMetricsAsync()
     {
         FailedTransactionsCount = await Db.Transactions.CountAsync(t => t.Status == "Failed");
         DiagnosticsCount = await Db.Diagnostics.CountAsync();
+
+        // Calculate percentage of diagnostics marked useful (IsUseful == true)
+        var totalRated = await Db.Diagnostics.CountAsync(d => d.IsUseful != null);
+        if (totalRated == 0)
+        {
+            UsefulPercent = -1; // N/A
+        }
+        else
+        {
+            var usefulCount = await Db.Diagnostics.CountAsync(d => d.IsUseful == true);
+            UsefulPercent = (int)Math.Round((double)usefulCount / totalRated * 100);
+        }
     }
 
     private bool IsProcessing(int id) => processing.TryGetValue(id, out var v) && v;
