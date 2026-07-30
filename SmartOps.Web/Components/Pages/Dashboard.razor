@@ -1,5 +1,6 @@
 @page "/"
 @rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using SmartOps.Core.Entities
 @using Microsoft.EntityFrameworkCore
 @inject SmartOps.Infrastructure.Data.AppDbContext Db

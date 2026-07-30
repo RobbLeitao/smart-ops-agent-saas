@@ -181,6 +181,35 @@ else
 
 // Proceed with building the app further below...
 
+// Add Identity and auth services
+builder.Services.AddIdentity<SmartOps.Infrastructure.Data.ApplicationUser, Microsoft.AspNetCore.Identity.IdentityRole>(options =>
+{
+    options.User.RequireUniqueEmail = true;
+})
+    .AddEntityFrameworkStores<SmartOps.Infrastructure.Data.AppDbContext>();
+
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.LoginPath = "/login";
+    // Avoid adding ReturnUrl query parameter — keep login URL clean for UX
+    options.ReturnUrlParameter = string.Empty;
+    // Redirect unauthorized (wrong role) straight to Dashboard, no query params
+    options.Events.OnRedirectToAccessDenied = ctx =>
+    {
+        ctx.Response.Redirect("/");
+        return Task.CompletedTask;
+    };
+});
+
+builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie();
+
+builder.Services.AddAuthorization();
+
+// Register HttpClient for server-side components so Blazor pages can inject HttpClient (e.g., Login.razor)
+builder.Services.AddHttpClient();
+
+
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -237,7 +266,47 @@ using (var scope = app.Services.CreateScope())
         Program.EnsureColumnExists(db, "Diagnostics", "CardLast4", "TEXT");
         Program.EnsureColumnExists(db, "Diagnostics", "WasHelpful", "INTEGER");
         Program.EnsureColumnExists(db, "Diagnostics", "IsUseful", "INTEGER");
+        Program.EnsureColumnExists(db, "Diagnostics", "UserId", "TEXT");
         Program.BackfillTransactionCards(db);
+
+        // Seed roles and test users
+        try
+        {
+            var roleManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.RoleManager<Microsoft.AspNetCore.Identity.IdentityRole>>();
+            var userManager = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<SmartOps.Infrastructure.Data.ApplicationUser>>();
+
+            var roles = new[] { "Operador", "Auditor" };
+            foreach (var r in roles)
+            {
+                if (!await roleManager.RoleExistsAsync(r))
+                {
+                    await roleManager.CreateAsync(new Microsoft.AspNetCore.Identity.IdentityRole(r));
+                }
+            }
+
+            async Task EnsureUserAsync(string email, string role)
+            {
+                var existing = await userManager.FindByEmailAsync(email);
+                if (existing == null)
+                {
+                    var user = new SmartOps.Infrastructure.Data.ApplicationUser { UserName = email, Email = email, EmailConfirmed = true };
+                    var pw = "P@ssw0rd!"; // dev/test password
+                    var create = await userManager.CreateAsync(user, pw);
+                    if (create.Succeeded)
+                    {
+                        await userManager.AddToRoleAsync(user, role);
+                    }
+                }
+            }
+
+            await EnsureUserAsync("operador@smartops.com", "Operador");
+            await EnsureUserAsync("admin@smartops.com", "Auditor");
+        }
+        catch
+        {
+            // ignore seeding errors in constrained/test environments
+        }
+
         // Ensure a simple key-value settings table exists for runtime persistence of integrations/configuration
         try
         {
@@ -280,6 +349,49 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+// Minimal account endpoints for login to set cookies outside the Blazor circuit
+app.MapPost("/account/login", async (HttpContext http, Microsoft.AspNetCore.Identity.UserManager<SmartOps.Infrastructure.Data.ApplicationUser> userManager, Microsoft.AspNetCore.Identity.SignInManager<SmartOps.Infrastructure.Data.ApplicationUser> signInManager) =>
+{
+    try
+    {
+        using var sr = new StreamReader(http.Request.Body);
+        var body = await sr.ReadToEndAsync();
+        Console.Error.WriteLine($"[DEBUG] /account/login body: '{body}'");
+        if (string.IsNullOrWhiteSpace(body)) return Results.BadRequest(new { error = "Los campos están vacíos." });
+        var dict = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string,string>>(body, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        var email = dict != null && dict.TryGetValue("Email", out var e) ? e : string.Empty;
+        var password = dict != null && dict.TryGetValue("Password", out var p) ? p : string.Empty;
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password)) return Results.BadRequest(new { error = "Los campos están vacíos." });
+
+        var user = await userManager.FindByEmailAsync(email);
+        if (user == null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var check = await signInManager.CheckPasswordSignInAsync(user, password, lockoutOnFailure: false);
+        if (!check.Succeeded)
+        {
+            return Results.Unauthorized();
+        }
+
+        await signInManager.SignInAsync(user, isPersistent: false);
+        return Results.Ok();
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Account login endpoint error: {ex}");
+        return Results.StatusCode(500);
+    }
+}).WithMetadata(new Microsoft.AspNetCore.Mvc.IgnoreAntiforgeryTokenAttribute());
+
+app.MapGet("/account/logout", async (HttpContext http, Microsoft.AspNetCore.Identity.SignInManager<SmartOps.Infrastructure.Data.ApplicationUser> signInManager) =>
+{
+    await signInManager.SignOutAsync();
+    return Results.Redirect("/login");
+});
+
+// DTO used for the login endpoint
 // Stripe webhook receiver
 app.MapPost("/api/webhooks/stripe/{transactionId?}", async (HttpRequest req, string? transactionId, SmartOps.Web.Services.DiagnosticOrchestratorService orchestrator) =>
 {

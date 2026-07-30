@@ -16,6 +16,18 @@
 
 <body>
     <Routes />
+    <script>
+        window.fetchLogin = async (url, body) => {
+            const r = await fetch(url, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: body
+            });
+            const text = await r.text();
+            return JSON.stringify({ status: r.status, text });
+        };
+    </script>
     <script src="_framework/blazor.web.js"></script>
 </body>
 

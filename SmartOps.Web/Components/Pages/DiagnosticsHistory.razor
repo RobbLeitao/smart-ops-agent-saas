@@ -1,9 +1,12 @@
 @page "/diagnostics-history"
 @rendermode InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using SmartOps.Core.Entities
 @using Microsoft.EntityFrameworkCore
 @inject SmartOps.Infrastructure.Data.AppDbContext Db
 @inject IJSRuntime JS
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthStateProvider
 
 <style>
     /* Modal and feedback UI tweaks */
@@ -294,11 +297,28 @@
         // Persist asynchronously but do not block the UI reaction
         try
         {
+            // Capture current user id if authenticated
+            string? userId = null;
+            try
+            {
+                var state = await AuthStateProvider.GetAuthenticationStateAsync();
+                var user = state.User;
+                if (user?.Identity != null && user.Identity.IsAuthenticated)
+                {
+                    userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
             var entity = await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == activeDiagnostic.Id);
             if (entity != null)
             {
                 entity.IsUseful = helpful;
                 entity.WasHelpful = helpful; // backward compatibility
+                if (!string.IsNullOrWhiteSpace(userId)) entity.UserId = userId;
                 await Db.SaveChangesAsync();
             }
             showFeedbackSaved = true;

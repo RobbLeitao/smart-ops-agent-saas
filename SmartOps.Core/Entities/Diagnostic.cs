@@ -21,5 +21,8 @@ namespace SmartOps.Core.Entities
 
         // New field for persisted usefulness flag (Hito 20)
         public bool? IsUseful { get; set; }
+
+        // ID of the user who submitted feedback (nullable for legacy/anonymous)
+        public string? UserId { get; set; }
     }
 }

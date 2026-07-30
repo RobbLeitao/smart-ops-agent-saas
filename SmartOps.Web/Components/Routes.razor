@@ -1,6 +1,24 @@
-﻿<Router AppAssembly="typeof(Program).Assembly">
-    <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
-    </Found>
-</Router>
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Routing
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="typeof(Program).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                <NotAuthorized>
+                    <AuthorizeView>
+                        <Authorized Context="authState">
+                            @* Usuario autenticado pero sin el rol requerido → volver al Dashboard *@
+                            <RedirectToDashboard />
+                        </Authorized>
+                        <NotAuthorized Context="authState">
+                            @* Usuario no autenticado → ir al Login *@
+                            <RedirectToLogin />
+                        </NotAuthorized>
+                    </AuthorizeView>
+                </NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+    </Router>
+</CascadingAuthenticationState>
