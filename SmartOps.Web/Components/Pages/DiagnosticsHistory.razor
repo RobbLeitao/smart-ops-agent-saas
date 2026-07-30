@@ -177,6 +177,7 @@
 
     private List<Diagnostic>? diagnostics;
     private Diagnostic? activeDiagnostic;
+    private SmartOps.Core.Entities.DiagnosticFeedback? activeFeedback;
     private string filterLast4 = string.Empty;
     private bool showCopied;
     private bool showFeedbackSaved;
@@ -222,11 +223,13 @@
         }
         showCopied = false;
         showFeedbackSaved = false;
+        activeFeedback = await LoadCurrentUserFeedbackAsync(id);
     }
 
     private void CloseDiagnostic()
     {
         activeDiagnostic = null;
+        activeFeedback = null;
         showCopied = false;
         showFeedbackSaved = false;
     }
@@ -273,12 +276,29 @@
 
     private string FeedbackButtonClass(bool helpful)
     {
-        var active = activeDiagnostic != null && activeDiagnostic.IsUseful == helpful;
-        // base classes + highlight when active
+        var active = activeFeedback != null && activeFeedback.IsUseful == helpful;
         return active ? "btn btn-sm feedback-btn active" : "btn btn-sm feedback-btn";
     }
 
-    private bool IsFeedbackSelected => isSavingFeedback || (activeDiagnostic != null && activeDiagnostic.IsUseful != null);
+    private bool IsFeedbackSelected => isSavingFeedback || activeFeedback != null;
+
+    private async Task<SmartOps.Core.Entities.DiagnosticFeedback?> LoadCurrentUserFeedbackAsync(Guid diagnosticId)
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = state.User;
+        if (user?.Identity == null || !user.Identity.IsAuthenticated)
+        {
+            return null;
+        }
+
+        var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return null;
+        }
+
+        return await Db.DiagnosticFeedback.FirstOrDefaultAsync(x => x.DiagnosticId == diagnosticId && x.UserId == userId);
+    }
 
     private async Task RateDiagnosticAsync(bool helpful)
     {
@@ -287,51 +307,61 @@
             return;
         }
 
-        // Immediate UI reaction: mark selection and show thanks message while saving in background
         isSavingFeedback = true;
-        activeDiagnostic.IsUseful = helpful;
-        activeDiagnostic.WasHelpful = helpful; // keep legacy field in sync
         showFeedbackThanks = true;
         StateHasChanged();
 
-        // Persist asynchronously but do not block the UI reaction
         try
         {
-            // Capture current user id if authenticated
             string? userId = null;
-            try
+            var state = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = state.User;
+            if (user?.Identity != null && user.Identity.IsAuthenticated)
             {
-                var state = await AuthStateProvider.GetAuthenticationStateAsync();
-                var user = state.User;
-                if (user?.Identity != null && user.Identity.IsAuthenticated)
-                {
-                    userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-                }
+                userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             }
-            catch
+
+            if (!string.IsNullOrWhiteSpace(userId))
             {
-                // ignore
+                var existing = await Db.DiagnosticFeedback.FirstOrDefaultAsync(x => x.DiagnosticId == activeDiagnostic.Id && x.UserId == userId);
+                if (existing == null)
+                {
+                    existing = new SmartOps.Core.Entities.DiagnosticFeedback
+                    {
+                        Id = Guid.NewGuid(),
+                        DiagnosticId = activeDiagnostic.Id,
+                        UserId = userId,
+                        IsUseful = helpful,
+                        VotedAt = DateTime.UtcNow
+                    };
+                    Db.DiagnosticFeedback.Add(existing);
+                }
+                else
+                {
+                    existing.IsUseful = helpful;
+                    existing.VotedAt = DateTime.UtcNow;
+                }
+
+                await Db.SaveChangesAsync();
+                activeFeedback = existing;
             }
 
             var entity = await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == activeDiagnostic.Id);
             if (entity != null)
             {
-                entity.IsUseful = helpful;
-                entity.WasHelpful = helpful; // backward compatibility
-                if (!string.IsNullOrWhiteSpace(userId)) entity.UserId = userId;
+                entity.WasHelpful = helpful;
                 await Db.SaveChangesAsync();
             }
+
             showFeedbackSaved = true;
         }
         catch
         {
-            // Ignore persistence errors for now; keep UI reaction. Could surface later.
         }
         finally
         {
             isSavingFeedback = false;
             StateHasChanged();
-            // Auto-hide thanks after a short delay to mimic fade-out
             await Task.Delay(1600);
             showFeedbackThanks = false;
             StateHasChanged();

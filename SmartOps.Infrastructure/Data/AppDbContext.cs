@@ -15,6 +15,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<OperationLog> OperationLogs => Set<OperationLog>();
     public DbSet<SmartOps.Core.Entities.Diagnostic> Diagnostics => Set<SmartOps.Core.Entities.Diagnostic>();
+    public DbSet<SmartOps.Core.Entities.DiagnosticFeedback> DiagnosticFeedback => Set<SmartOps.Core.Entities.DiagnosticFeedback>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -69,6 +70,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                 Component = "StripeGateway",
                 Message = "Webhook timeout for transaction TXN_ERR_502. Payment was captured at gateway but status update failed locally."
             });
+
+        modelBuilder.Entity<DiagnosticFeedback>()
+            .HasIndex(x => new { x.DiagnosticId, x.UserId })
+            .IsUnique();
 
             // No seed for diagnostics by default; they are created at runtime when operator runs Analyze with IA.
     }

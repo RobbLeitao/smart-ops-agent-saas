@@ -218,15 +218,15 @@
         FailedTransactionsCount = await Db.Transactions.CountAsync(t => t.Status == "Failed");
         DiagnosticsCount = await Db.Diagnostics.CountAsync();
 
-        // Calculate percentage of diagnostics marked useful (IsUseful == true)
-        var totalRated = await Db.Diagnostics.CountAsync(d => d.IsUseful != null);
+        // Calculate percentage of feedback votes marked useful
+        var totalRated = await Db.DiagnosticFeedback.CountAsync();
         if (totalRated == 0)
         {
             UsefulPercent = -1; // N/A
         }
         else
         {
-            var usefulCount = await Db.Diagnostics.CountAsync(d => d.IsUseful == true);
+            var usefulCount = await Db.DiagnosticFeedback.CountAsync(d => d.IsUseful == true);
             UsefulPercent = (int)Math.Round((double)usefulCount / totalRated * 100);
         }
     }
