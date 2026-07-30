@@ -267,6 +267,7 @@ using (var scope = app.Services.CreateScope())
         Program.EnsureColumnExists(db, "Diagnostics", "WasHelpful", "INTEGER");
         Program.EnsureColumnExists(db, "Diagnostics", "IsUseful", "INTEGER");
         Program.EnsureColumnExists(db, "Diagnostics", "UserId", "TEXT");
+        Program.EnsureColumnExists(db, "Diagnostics", "CreatedByUserId", "TEXT");
         Program.BackfillTransactionCards(db);
 
         // Seed roles and test users

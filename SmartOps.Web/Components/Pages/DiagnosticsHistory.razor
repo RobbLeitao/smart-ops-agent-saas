@@ -7,6 +7,7 @@
 @inject IJSRuntime JS
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthStateProvider
+@inject Microsoft.AspNetCore.Identity.UserManager<SmartOps.Infrastructure.Data.ApplicationUser> UserManager
 
 <style>
     /* Modal and feedback UI tweaks */
@@ -92,6 +93,10 @@
                             <tr class="text-slate-400 small bg-transparent">
                                 <th class="ps-3 text-slate-300">ID Diagnóstico</th>
                                 <th class="text-slate-300">Fecha</th>
+                                @if (showCreatorColumn)
+                                {
+                                    <th class="text-slate-300">Operador</th>
+                                }
                                 <th class="text-slate-300">ID Transacción</th>
                                 <th class="text-slate-300">Error Original</th>
                                 <th class="text-slate-300">Tarjeta</th>
@@ -104,6 +109,10 @@
                                 <tr class="bg-transparent">
                                     <td class="ps-3 text-slate-200"><strong>@d.Id</strong></td>
                                     <td class="text-slate-200">@d.CreatedAt.ToLocalTime().ToString("g")</td>
+                                    @if (showCreatorColumn)
+                                    {
+                                        <td class="text-slate-200 small">@GetCreatorEmail(d.CreatedByUserId)</td>
+                                    }
                                     <td class="text-slate-200">@d.TransactionId</td>
                                     <td class="text-slate-200 small">@GetTransactionError(d.TransactionId)</td>
                                     <td class="text-slate-200 small">@FormatCard(d.CardLast4)</td>
@@ -178,7 +187,10 @@
     private List<Diagnostic>? diagnostics;
     private Diagnostic? activeDiagnostic;
     private SmartOps.Core.Entities.DiagnosticFeedback? activeFeedback;
+    private bool showCreatorColumn;
+    private string? currentUserId;
     private string filterLast4 = string.Empty;
+    private readonly Dictionary<string, string> creatorEmailCache = new();
     private bool showCopied;
     private bool showFeedbackSaved;
     private bool showFeedbackThanks;
@@ -203,7 +215,30 @@
     }
     protected override async Task OnInitializedAsync()
     {
-        diagnostics = await Db.Diagnostics.OrderByDescending(d => d.CreatedAt).Take(200).ToListAsync();
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = auth.User;
+        currentUserId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        showCreatorColumn = user?.IsInRole("Auditor") == true || user?.IsInRole("Admin") == true;
+
+        var query = Db.Diagnostics.AsQueryable();
+        if (!showCreatorColumn && !string.IsNullOrWhiteSpace(currentUserId))
+        {
+            query = query.Where(d => d.CreatedByUserId == currentUserId);
+        }
+
+        diagnostics = await query.OrderByDescending(d => d.CreatedAt).Take(200).ToListAsync();
+
+        var creatorIds = diagnostics
+            .Where(d => !string.IsNullOrWhiteSpace(d.CreatedByUserId))
+            .Select(d => d.CreatedByUserId!)
+            .Distinct()
+            .ToList();
+
+        foreach (var creatorId in creatorIds)
+        {
+            var creator = await UserManager.FindByIdAsync(creatorId);
+            creatorEmailCache[creatorId] = creator?.Email ?? creatorId;
+        }
     }
 
     private string GetTransactionError(int txId)
@@ -366,6 +401,21 @@
             showFeedbackThanks = false;
             StateHasChanged();
         }
+    }
+
+    private string GetCreatorEmail(string? creatorUserId)
+    {
+        if (string.IsNullOrWhiteSpace(creatorUserId))
+        {
+            return "-";
+        }
+
+        if (creatorEmailCache.TryGetValue(creatorUserId, out var email))
+        {
+            return email;
+        }
+
+        return creatorUserId;
     }
 
     private string RenderMarkdown(string md)

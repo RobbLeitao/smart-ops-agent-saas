@@ -3,8 +3,10 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @using SmartOps.Core.Entities
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
 @inject SmartOps.Infrastructure.Data.AppDbContext Db
 @inject SmartOps.Web.Services.DiagnosticOrchestratorService Orchestrator
+@inject AuthenticationStateProvider AuthStateProvider
 
 <div class="min-vh-100 py-5" style="background-color:transparent;">
     <div class="container-fluid">
@@ -259,7 +261,13 @@
             {
                 try
                 {
-                    var md = await Orchestrator.RunDiagnosticAsync(tx);
+                    var state = await AuthStateProvider.GetAuthenticationStateAsync();
+                    var user = state.User;
+                    var createdByUserId = user?.Identity != null && user.Identity.IsAuthenticated
+                        ? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                        : null;
+
+                    var md = await Orchestrator.RunDiagnosticAsync(tx, createdByUserId);
                                         ShowDiagnostic(id, md ?? "");
                     DiagnosticsCount = await Db.Diagnostics.CountAsync();
                 }

@@ -89,7 +89,25 @@ public sealed class DiagnosticOrchestratorService
         }
     }
 
-    private async Task PersistDiagnosticAsync(SmartOps.Core.Entities.Transaction tx, string response)
+    public async Task<string> RunDiagnosticAsync(SmartOps.Core.Entities.Transaction tx, string? createdByUserId)
+    {
+        if (tx == null) throw new ArgumentNullException(nameof(tx));
+
+        var response = await RunDiagnosticAsync(tx);
+        if (!string.IsNullOrWhiteSpace(response) && _db != null)
+        {
+            var latest = await _db.Diagnostics.OrderByDescending(d => d.CreatedAt).FirstOrDefaultAsync(d => d.TransactionId == tx.Id);
+            if (latest != null && latest.CreatedByUserId == null)
+            {
+                latest.CreatedByUserId = createdByUserId;
+                await _db.SaveChangesAsync();
+            }
+        }
+
+        return response;
+    }
+
+    private async Task PersistDiagnosticAsync(SmartOps.Core.Entities.Transaction tx, string response, string? createdByUserId = null)
     {
         if (string.IsNullOrWhiteSpace(tx.CardLast4))
         {
@@ -102,7 +120,8 @@ public sealed class DiagnosticOrchestratorService
             TransactionId = tx.Id,
             CreatedAt = DateTime.UtcNow,
             Markdown = response,
-            CardLast4 = tx.CardLast4
+            CardLast4 = tx.CardLast4,
+            CreatedByUserId = createdByUserId
         };
 
         _db!.Diagnostics.Add(diag);

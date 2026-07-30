@@ -75,6 +75,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             .HasIndex(x => new { x.DiagnosticId, x.UserId })
             .IsUnique();
 
+        modelBuilder.Entity<SmartOps.Core.Entities.Diagnostic>()
+            .Property(x => x.CreatedByUserId)
+            .HasMaxLength(450);
+
             // No seed for diagnostics by default; they are created at runtime when operator runs Analyze with IA.
     }
 }

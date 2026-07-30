@@ -24,5 +24,8 @@ namespace SmartOps.Core.Entities
 
         // ID of the user who submitted feedback (nullable for legacy/anonymous)
         public string? UserId { get; set; }
+
+        // ID of the user who created the diagnostic
+        public string? CreatedByUserId { get; set; }
     }
 }
