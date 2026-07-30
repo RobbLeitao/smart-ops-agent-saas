@@ -9,26 +9,28 @@ namespace SmartOps.Web.Tests;
 public sealed class DashboardMetricsHelperTests
 {
     [Fact]
-    public void AdminOnlyMine_FilterRestrictsDiagnostics()
+    public void ToggleDoesNotChangeFailureMetrics()
     {
         var txs = new[]
         {
             new Transaction { Id = 1, Status = "Failed", ErrorMessage = "Card declined" },
-            new Transaction { Id = 2, Status = "Approved", ErrorMessage = null }
+            new Transaction { Id = 2, Status = "Approved", ErrorMessage = null },
+            new Transaction { Id = 3, Status = "Approved", ErrorMessage = null }
         };
 
         var diagnostics = new[]
         {
             new Diagnostic { CreatedByUserId = "admin", TransactionId = 1 },
-            new Diagnostic { CreatedByUserId = "other", TransactionId = 2 }
+            new Diagnostic { CreatedByUserId = "other", TransactionId = 2 },
+            new Diagnostic { CreatedByUserId = "admin", TransactionId = 3 }
         };
 
         var feedback = Array.Empty<DiagnosticFeedback>();
         var metrics = DashboardMetricsHelper.Build(txs, feedback, diagnostics, true, "admin");
 
-        Assert.Equal(1, metrics.DiagnosticsCount);
+        Assert.Equal(3, metrics.DiagnosticsCount);
         Assert.Equal(1, metrics.FailedTransactionsCount);
-        Assert.Equal(1, metrics.ApprovedTransactionsCount);
+        Assert.Equal(2, metrics.ApprovedTransactionsCount);
     }
 
     [Fact]

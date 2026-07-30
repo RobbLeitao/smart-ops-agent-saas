@@ -1,5 +1,7 @@
 using System.Threading.Tasks;
 using Bunit;
+using Microsoft.AspNetCore.Components.Authorization;
+using System.Security.Claims;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -35,6 +37,7 @@ namespace SmartOps.Web.Tests
             ctx.Services.AddSingleton(db);
             ctx.Services.AddSingleton<SmartOps.Web.Services.IAIOpsService>(fake);
             ctx.Services.AddSingleton<SmartOps.Web.Services.DiagnosticOrchestratorService>();
+            ctx.Services.AddSingleton<AuthenticationStateProvider>(new TestAuthenticationStateProvider());
 
             var comp = ctx.Render<SmartOps.Web.Components.Pages.Dashboard>();
 
@@ -54,6 +57,21 @@ namespace SmartOps.Web.Tests
             tcs.SetResult("## 🔍 Simulated result\n\n- ok");
             await Task.Delay(200);
             Assert.True(true);
+        }
+
+        private sealed class TestAuthenticationStateProvider : AuthenticationStateProvider
+        {
+            public override Task<AuthenticationState> GetAuthenticationStateAsync()
+            {
+                var identity = new ClaimsIdentity(new[]
+                {
+                    new Claim(ClaimTypes.NameIdentifier, "admin"),
+                    new Claim(ClaimTypes.Name, "admin@smartops.com"),
+                    new Claim(ClaimTypes.Role, "Auditor")
+                }, "Test");
+
+                return Task.FromResult(new AuthenticationState(new ClaimsPrincipal(identity)));
+            }
         }
     }
 }

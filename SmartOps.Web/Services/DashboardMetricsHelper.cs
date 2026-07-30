@@ -16,16 +16,11 @@ public static class DashboardMetricsHelper
         IEnumerable<Transaction> transactions,
         IEnumerable<DiagnosticFeedback> feedback,
         IEnumerable<Diagnostic> diagnostics,
-        bool onlyMyDiagnostics,
-        string? currentUserId)
+        bool _,
+        string? __)
     {
         var txs = transactions ?? Enumerable.Empty<Transaction>();
         var diags = diagnostics ?? Enumerable.Empty<Diagnostic>();
-
-        if (onlyMyDiagnostics && !string.IsNullOrWhiteSpace(currentUserId))
-        {
-            diags = diags.Where(d => d.CreatedByUserId == currentUserId);
-        }
 
         var totalTx = txs.Count();
         var failedTx = txs.Count(t => string.Equals(t.Status, "Failed", StringComparison.OrdinalIgnoreCase));

@@ -36,24 +36,25 @@
                 </div>
             </div>
 
-            @if (isAdminUser)
-            {
-                <div class="mb-3 d-flex align-items-center gap-2">
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="onlyMyDiagnosticsDashboard" checked="@onlyMyDiagnostics" @onchange="OnOnlyMyDiagnosticsChanged" />
-                        <label class="form-check-label text-slate-300" for="onlyMyDiagnosticsDashboard">Solo mis diagnósticos</label>
+            <div class="row g-3 mb-2 align-items-stretch">
+                @if (isAdminUser)
+                {
+                    <div class="col-lg-4">
+                        <div class="p-3 bg-[#171c26] rounded h-100 d-flex align-items-center">
+                            <div class="form-check form-switch mb-0">
+                                <InputCheckbox class="form-check-input" id="showAllRecordsDashboard" @bind-Value="showAllRecords" @bind-Value:after="LoadGridAsync" />
+                                <label class="form-check-label text-slate-300" for="showAllRecordsDashboard">Ver todos los registros</label>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            }
-
-            <div class="row g-3 mb-4">
-                <div class="col-lg-4">
+                }
+                <div class="@(isAdminUser ? "col-lg-3" : "col-lg-4")">
                     <div class="p-3 bg-[#171c26] rounded h-100">
                         <div class="text-slate-400 small mb-2">Tasa de aprobación</div>
                         <div class="h4 text-white mb-0">@SuccessRateDisplay</div>
                     </div>
                 </div>
-                <div class="col-lg-8">
+                <div class="@(isAdminUser ? "col-lg-5" : "col-lg-8")">
                     <div class="p-3 bg-[#171c26] rounded h-100">
                         <div class="text-slate-400 small mb-2">Motivos de falla más frecuentes</div>
                         @if (FailureReasons.Count == 0)
@@ -78,7 +79,7 @@
                 <small class="text-slate-400">Escriba de 1 a 4 dígitos para filtrar en tiempo real (ej. 4, 43, 4532)</small>
             </div>
 
-            @if (failedTransactions == null)
+            @if (gridTransactions == null)
             {
                 <p>Loading...</p>
             }
@@ -86,9 +87,9 @@
             {
                 <div class="py-5 text-center text-slate-400">No se encontraron transacciones para la tarjeta ingresada.</div>
             }
-            else if (failedTransactions.Count == 0)
+            else if (gridTransactions.Count == 0)
             {
-                <p>No failed transactions found.</p>
+                <p>No transactions found.</p>
             }
             else
             {
@@ -118,8 +119,11 @@
                                             </span>
                                         </td>
                                         <td>
-                                            <span class="badge rounded-pill" style="background-color:#2b3440;color:#e6eef8;border:1px solid rgba(255,255,255,0.02);">Failed</span>
-                                                                                        <div class="text-slate-400 small">@t.ErrorMessage</div>
+                                            <span class="badge rounded-pill" style="background-color:#2b3440;color:#e6eef8;border:1px solid rgba(255,255,255,0.02);">@t.Status</span>
+                                            @if (!string.IsNullOrWhiteSpace(t.ErrorMessage))
+                                            {
+                                                <div class="text-slate-400 small">@t.ErrorMessage</div>
+                                            }
                                         </td>
                                         <td>@t.OccurredAt?.ToString("g")</td>
                                         <td class="text-end pe-3">
@@ -170,6 +174,8 @@
 </div>
 
 @code {
+    private List<Transaction>? allTransactions;
+    private List<Transaction>? gridTransactions;
     private List<Transaction>? failedTransactions;
     private int FailedTransactionsCount;
     private int DiagnosticsCount;
@@ -194,6 +200,10 @@
         get
         {
             var list = failedTransactions ?? Enumerable.Empty<Transaction>();
+            if (showAllRecords)
+            {
+                list = gridTransactions ?? Enumerable.Empty<Transaction>();
+            }
             if (string.IsNullOrWhiteSpace(filterLast4))
             {
                 return list;
@@ -210,47 +220,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-                await LoadMetricsAsync();
-                // Ensure sample failed transactions exist for UI/demo
-                var existing = await Db.Transactions.AsNoTracking().Where(t => t.Status == "Failed").ToListAsync();
-                var now = DateTime.UtcNow;
-                const int target = 8; // ensure more volume
-                if (existing == null) existing = new List<SmartOps.Core.Entities.Transaction>();
-                var toAdd = new List<SmartOps.Core.Entities.Transaction>();
-                var sampleErrors = new[] { "Card declined", "Expired card", "Insufficient funds", "Processing error", "Suspected fraud", "Invalid CVC" };
-                var nextId = existing.Count == 0 ? 1 : existing.Max(t => t.Id) + 1;
-                int seedIndex = 0;
-                while (existing.Count + toAdd.Count < target)
-                {
-                    var amt = 10m + (seedIndex * 5);
-                    var currency = (seedIndex % 2 == 0) ? "USD" : "EUR";
-                    var err = sampleErrors[seedIndex % sampleErrors.Length];
-                    var last4 = ((seedIndex * 137) + 4242) % 10000;
-                    toAdd.Add(new SmartOps.Core.Entities.Transaction { Id = nextId + seedIndex, CustomerId = 1, Amount = Math.Round(amt,2), Currency = currency, ErrorMessage = err, Status = "Failed", CardLast4 = last4.ToString("D4"), OccurredAt = now.AddMinutes(-(seedIndex+1)*15) });
-                    seedIndex++;
-                }
-
-                if (toAdd.Count > 0)
-                {
-                    foreach (var s in toAdd) Db.Transactions.Add(s);
-                    try
-                    {
-                        await Db.SaveChangesAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        // Surface seeding errors to the console for diagnostics during development
-                        Console.Error.WriteLine($"Failed to seed transactions: {ex}");
-                        throw;
-                    }
-                }
-
-        failedTransactions = await Db.Transactions.Where(t => t.Status == "Failed").OrderByDescending(t => t.OccurredAt).ToListAsync();
-        FailedTransactionsCount = failedTransactions.Count;
+        await LoadMetricsAsync();
+        await LoadGridAsync();
     }
 
     private int UsefulPercent;
-    private bool onlyMyDiagnostics;
+    private bool showAllRecords;
     private bool isAdminUser;
     private string? currentUserId;
     private int ApprovedTransactionsCount;
@@ -259,12 +234,6 @@
     private List<(string Reason, int Count)> FailureReasons = new();
     private string UsefulPercentDisplay => UsefulPercent < 0 ? "N/A" : UsefulPercent + "%";
 
-    private Task OnOnlyMyDiagnosticsChanged(ChangeEventArgs e)
-    {
-        onlyMyDiagnostics = bool.TryParse(e.Value?.ToString(), out var b) && b;
-        return LoadMetricsAsync();
-    }
-
     private async Task LoadMetricsAsync()
     {
         var auth = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -272,16 +241,10 @@
         currentUserId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         isAdminUser = user?.IsInRole("Auditor") == true || user?.IsInRole("Admin") == true;
 
-        var diagnosticsQuery = Db.Diagnostics.AsQueryable();
-        if (isAdminUser && onlyMyDiagnostics && !string.IsNullOrWhiteSpace(currentUserId))
-        {
-            diagnosticsQuery = diagnosticsQuery.Where(d => d.CreatedByUserId == currentUserId);
-        }
-
-        var diagnostics = await diagnosticsQuery.ToListAsync();
+        var diagnostics = await Db.Diagnostics.ToListAsync();
         var transactions = await Db.Transactions.ToListAsync();
         var feedback = await Db.DiagnosticFeedback.ToListAsync();
-        var metrics = SmartOps.Web.Services.DashboardMetricsHelper.Build(transactions, feedback, diagnostics, onlyMyDiagnostics, currentUserId);
+        var metrics = SmartOps.Web.Services.DashboardMetricsHelper.Build(transactions, feedback, diagnostics, false, currentUserId);
 
         FailedTransactionsCount = metrics.FailedTransactionsCount;
         DiagnosticsCount = metrics.DiagnosticsCount;
@@ -292,6 +255,13 @@
     }
 
     private bool IsProcessing(int id) => processing.TryGetValue(id, out var v) && v;
+
+    private async Task LoadGridAsync()
+    {
+        allTransactions = await Db.Transactions.OrderByDescending(t => t.OccurredAt).ToListAsync();
+        failedTransactions = allTransactions.Where(t => string.Equals(t.Status, "Failed", StringComparison.OrdinalIgnoreCase)).ToList();
+        gridTransactions = showAllRecords ? allTransactions : failedTransactions;
+    }
 
     private async Task AnalyzeAsync(int id)
     {
