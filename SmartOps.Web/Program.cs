@@ -269,6 +269,7 @@ using (var scope = app.Services.CreateScope())
         Program.EnsureColumnExists(db, "Diagnostics", "UserId", "TEXT");
         Program.EnsureColumnExists(db, "Diagnostics", "CreatedByUserId", "TEXT");
         Program.BackfillTransactionCards(db);
+        Program.SeedDemoTransactionsAndDiagnostics(db);
 
         // Seed roles and test users
         try
@@ -530,6 +531,79 @@ public partial class Program
         }
 
         db.SaveChanges();
+    }
+
+    public static void SeedDemoTransactionsAndDiagnostics(AppDbContext db)
+    {
+        var existingCount = db.Transactions.Count();
+        var targetCount = 26;
+        if (existingCount < targetCount)
+        {
+            var sampleStatuses = new[]
+            {
+                ("Approved", null),
+                ("Success", null),
+                ("Failed", "Insufficient funds"),
+                ("Failed", "Card declined"),
+                ("Failed", "Expired card"),
+                ("Failed", "Suspected fraud"),
+                ("Failed", "Stolen card")
+            };
+
+            var nextId = db.Transactions.Any() ? db.Transactions.Max(t => t.Id) + 1 : 1;
+            var now = DateTime.UtcNow;
+            var toAdd = new List<SmartOps.Core.Entities.Transaction>();
+            var index = 0;
+            while (db.Transactions.Count() + toAdd.Count < targetCount)
+            {
+                var pair = sampleStatuses[index % sampleStatuses.Length];
+                toAdd.Add(new SmartOps.Core.Entities.Transaction
+                {
+                    Id = nextId + index,
+                    CustomerId = 1,
+                    Amount = 10m + (index * 7),
+                    Currency = index % 2 == 0 ? "USD" : "EUR",
+                    Status = pair.Item1,
+                    GatewayReference = $"DEMO_{nextId + index}",
+                    CardLast4 = ((((index * 137) + 4242) % 10000)).ToString("D4"),
+                    Provider = "Stripe",
+                    ErrorMessage = pair.Item2,
+                    OccurredAt = now.AddMinutes(-(index + 1) * 11)
+                });
+                index++;
+            }
+
+            db.Transactions.AddRange(toAdd);
+            db.SaveChanges();
+        }
+
+        if (db.Diagnostics.Count() < 20)
+        {
+            var admin = db.Users.FirstOrDefault(u => u.Email == "admin@smartops.com");
+            var operatorUser = db.Users.FirstOrDefault(u => u.Email == "operador@smartops.com");
+            var creatorIds = new[] { admin?.Id, operatorUser?.Id }.Where(x => !string.IsNullOrWhiteSpace(x)).Cast<string>().ToArray();
+            var failedTxs = db.Transactions.Where(t => t.Status == "Failed").OrderByDescending(t => t.OccurredAt).ToList();
+            var existingDiagTxIds = db.Diagnostics.Select(d => d.TransactionId).ToHashSet();
+            var diagIndex = 0;
+
+            foreach (var tx in failedTxs)
+            {
+                if (existingDiagTxIds.Contains(tx.Id)) continue;
+                db.Diagnostics.Add(new SmartOps.Core.Entities.Diagnostic
+                {
+                    Id = Guid.NewGuid(),
+                    TransactionId = tx.Id,
+                    CreatedAt = DateTime.UtcNow.AddMinutes(-(diagIndex + 1) * 10),
+                    Markdown = $"## 🔍 Resumen del Error\n{tx.ErrorMessage}\n\n## 🛠️ Acciones Recomendadas para el Operador\n- Revisar la tarjeta del cliente.\n\n## 📨 Mensaje sugerido para el cliente\nEstimado cliente, estamos investigando su pago.",
+                    CardLast4 = tx.CardLast4,
+                    CreatedByUserId = creatorIds.Length == 0 ? null : creatorIds[diagIndex % creatorIds.Length]
+                });
+                diagIndex++;
+                if (db.Diagnostics.Count() >= 20) break;
+            }
+
+            db.SaveChanges();
+        }
     }
 
     private static string CreateStableCardLast4(int transactionId)

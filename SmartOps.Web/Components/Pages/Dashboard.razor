@@ -36,6 +36,43 @@
                 </div>
             </div>
 
+            @if (isAdminUser)
+            {
+                <div class="mb-3 d-flex align-items-center gap-2">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="onlyMyDiagnosticsDashboard" checked="@onlyMyDiagnostics" @onchange="OnOnlyMyDiagnosticsChanged" />
+                        <label class="form-check-label text-slate-300" for="onlyMyDiagnosticsDashboard">Solo mis diagnósticos</label>
+                    </div>
+                </div>
+            }
+
+            <div class="row g-3 mb-4">
+                <div class="col-lg-4">
+                    <div class="p-3 bg-[#171c26] rounded h-100">
+                        <div class="text-slate-400 small mb-2">Tasa de aprobación</div>
+                        <div class="h4 text-white mb-0">@SuccessRateDisplay</div>
+                    </div>
+                </div>
+                <div class="col-lg-8">
+                    <div class="p-3 bg-[#171c26] rounded h-100">
+                        <div class="text-slate-400 small mb-2">Motivos de falla más frecuentes</div>
+                        @if (FailureReasons.Count == 0)
+                        {
+                            <div class="text-slate-400">Sin datos.</div>
+                        }
+                        else
+                        {
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (var reason in FailureReasons)
+                                {
+                                    <span class="badge rounded-pill" style="background:#2b3440;color:#e6eef8;">@reason.Reason (@reason.Count)</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
             <div class="mb-3">
                 <input class="form-control bg-[#11151b] border-0 text-slate-200" placeholder="Filtrar por últimos 4 dígitos..." @bind="filterLast4" @bind:event="oninput" maxlength="4" pattern="\d*" inputmode="numeric" style="max-width:320px;" />
                 <small class="text-slate-400">Escriba de 1 a 4 dígitos para filtrar en tiempo real (ej. 4, 43, 4532)</small>
@@ -213,24 +250,45 @@
     }
 
     private int UsefulPercent;
+    private bool onlyMyDiagnostics;
+    private bool isAdminUser;
+    private string? currentUserId;
+    private int ApprovedTransactionsCount;
+    private int SuccessRatePercent;
+    private string SuccessRateDisplay => SuccessRatePercent + "%";
+    private List<(string Reason, int Count)> FailureReasons = new();
     private string UsefulPercentDisplay => UsefulPercent < 0 ? "N/A" : UsefulPercent + "%";
+
+    private Task OnOnlyMyDiagnosticsChanged(ChangeEventArgs e)
+    {
+        onlyMyDiagnostics = bool.TryParse(e.Value?.ToString(), out var b) && b;
+        return LoadMetricsAsync();
+    }
 
     private async Task LoadMetricsAsync()
     {
-        FailedTransactionsCount = await Db.Transactions.CountAsync(t => t.Status == "Failed");
-        DiagnosticsCount = await Db.Diagnostics.CountAsync();
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = auth.User;
+        currentUserId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        isAdminUser = user?.IsInRole("Auditor") == true || user?.IsInRole("Admin") == true;
 
-        // Calculate percentage of feedback votes marked useful
-        var totalRated = await Db.DiagnosticFeedback.CountAsync();
-        if (totalRated == 0)
+        var diagnosticsQuery = Db.Diagnostics.AsQueryable();
+        if (isAdminUser && onlyMyDiagnostics && !string.IsNullOrWhiteSpace(currentUserId))
         {
-            UsefulPercent = -1; // N/A
+            diagnosticsQuery = diagnosticsQuery.Where(d => d.CreatedByUserId == currentUserId);
         }
-        else
-        {
-            var usefulCount = await Db.DiagnosticFeedback.CountAsync(d => d.IsUseful == true);
-            UsefulPercent = (int)Math.Round((double)usefulCount / totalRated * 100);
-        }
+
+        var diagnostics = await diagnosticsQuery.ToListAsync();
+        var transactions = await Db.Transactions.ToListAsync();
+        var feedback = await Db.DiagnosticFeedback.ToListAsync();
+        var metrics = SmartOps.Web.Services.DashboardMetricsHelper.Build(transactions, feedback, diagnostics, onlyMyDiagnostics, currentUserId);
+
+        FailedTransactionsCount = metrics.FailedTransactionsCount;
+        DiagnosticsCount = metrics.DiagnosticsCount;
+        ApprovedTransactionsCount = metrics.ApprovedTransactionsCount;
+        SuccessRatePercent = metrics.SuccessRatePercent;
+        UsefulPercent = metrics.UsefulPercent;
+        FailureReasons = metrics.FailureReasons.ToList();
     }
 
     private bool IsProcessing(int id) => processing.TryGetValue(id, out var v) && v;
