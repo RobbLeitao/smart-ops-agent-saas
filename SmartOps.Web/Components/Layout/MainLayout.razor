@@ -44,7 +44,7 @@
                 @if (authState != null && authState.User.Identity != null && authState.User.Identity.IsAuthenticated)
                 {
                     <div class="text-slate-200 small">@authState.User.Identity.Name</div>
-                    <a class="btn btn-sm" style="background:transparent;color:#cbd5e1;border:1px solid rgba(148,163,184,0.08);padding:6px 10px;border-radius:8px;text-decoration:none;" href="/account/logout">Cerrar Sesión</a>
+                    <a class="btn btn-sm" data-enhance-nav="false" style="background:transparent;color:#cbd5e1;border:1px solid rgba(148,163,184,0.08);padding:6px 10px;border-radius:8px;text-decoration:none;" href="/account/logout">Cerrar Sesión</a>
                 }
                 else
                 {

@@ -1,0 +1,29 @@
+@inherits ErrorBoundary
+@inject ILogger<LoggingErrorBoundary> Logger
+
+@if (CapturedException == null)
+{
+    @ChildContent
+}
+
+@if (CapturedException != null)
+{
+    <div class="alert alert-danger m-3">
+        <div>Ocurrió un error en Historial. Revisá la consola del servidor.</div>
+        <div class="mt-2"><strong>@CapturedException.Message</strong></div>
+        <pre class="mb-0 mt-2" style="white-space:pre-wrap;">@CapturedException.ToString()</pre>
+    </div>
+}
+
+@code {
+    private Exception? CapturedException;
+
+    protected override Task OnErrorAsync(Exception exception)
+    {
+        CapturedException = exception;
+        Logger.LogError(exception, "Unhandled exception in DiagnosticsHistory");
+        Console.Error.WriteLine(exception.ToString());
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+}

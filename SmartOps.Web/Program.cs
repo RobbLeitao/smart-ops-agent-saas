@@ -302,6 +302,21 @@ using (var scope = app.Services.CreateScope())
 
             await EnsureUserAsync("operador@smartops.com", "Operador");
             await EnsureUserAsync("admin@smartops.com", "Auditor");
+
+            var admin = await userManager.FindByEmailAsync("admin@smartops.com");
+            if (admin != null)
+            {
+                var diagnosticsToBackfill = db.Diagnostics.Where(d => d.CreatedByUserId == null).ToList();
+                if (diagnosticsToBackfill.Count > 0)
+                {
+                    foreach (var diag in diagnosticsToBackfill)
+                    {
+                        diag.CreatedByUserId = admin.Id;
+                    }
+
+                    db.SaveChanges();
+                }
+            }
         }
         catch
         {
