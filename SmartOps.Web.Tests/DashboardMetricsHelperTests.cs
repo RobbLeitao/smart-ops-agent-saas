@@ -34,6 +34,22 @@ public sealed class DashboardMetricsHelperTests
     }
 
     [Fact]
+    public void ChartCountsMatchMixedDataset()
+    {
+        var txs = new[]
+        {
+            new Transaction { Id = 1, Status = "Failed", ErrorMessage = "Card declined" },
+            new Transaction { Id = 2, Status = "Approved", ErrorMessage = null },
+            new Transaction { Id = 3, Status = "Success", ErrorMessage = null }
+        };
+
+        var metrics = DashboardMetricsHelper.Build(txs, Array.Empty<DiagnosticFeedback>(), Array.Empty<Diagnostic>(), false, null);
+
+        Assert.Equal(1, metrics.FailedChartCount);
+        Assert.Equal(2, metrics.ApprovedChartCount);
+    }
+
+    [Fact]
     public void FailureReasons_AreGroupedAndSorted()
     {
         var txs = new[]

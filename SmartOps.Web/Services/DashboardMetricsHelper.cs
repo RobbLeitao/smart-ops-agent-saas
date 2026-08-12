@@ -8,7 +8,9 @@ public sealed record DashboardMetrics(
     int ApprovedTransactionsCount,
     int SuccessRatePercent,
     int UsefulPercent,
-    IReadOnlyList<(string Reason, int Count)> FailureReasons);
+    IReadOnlyList<(string Reason, int Count)> FailureReasons,
+    int FailedChartCount,
+    int ApprovedChartCount);
 
 public static class DashboardMetricsHelper
 {
@@ -44,6 +46,8 @@ public static class DashboardMetricsHelper
             approvedTx,
             successRate,
             usefulPercent,
-            reasons);
+            reasons,
+            failedTx,
+            approvedTx);
     }
 }
