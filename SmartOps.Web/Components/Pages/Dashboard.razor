@@ -5,6 +5,7 @@
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.JSInterop
+@inject Microsoft.Extensions.Logging.ILogger<Dashboard> Logger
 @inject SmartOps.Infrastructure.Data.AppDbContext Db
 @inject SmartOps.Web.Services.DiagnosticOrchestratorService Orchestrator
 @inject AuthenticationStateProvider AuthStateProvider
@@ -217,7 +218,8 @@
     private int UsefulPercent;
     private bool showAllRecords;
     private bool isAdminUser;
-    private bool chartsDirty = true;
+    private bool chartsDirty;
+    private bool chartsRendering;
     private string? currentUserId;
     private int SuccessRatePercent;
     private List<(string Reason, int Count)> FailureReasons = new();
@@ -266,23 +268,30 @@
     {
         await LoadMetricsAsync();
         await LoadGridAsync();
+        chartsDirty = true;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender && !chartsDirty)
+        if (!chartsDirty || chartsRendering)
         {
             return;
         }
 
-        chartsDirty = false;
+        chartsRendering = true;
 
         try
         {
             await RefreshChartsAsync();
+            chartsDirty = false;
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.LogError(ex, "Dashboard charts failed to render.");
+        }
+        finally
+        {
+            chartsRendering = false;
         }
     }
 
@@ -293,6 +302,7 @@
     {
         await LoadMetricsAsync();
         await LoadGridAsync();
+        chartsDirty = true;
     }
 
     private async Task LoadMetricsAsync()
@@ -315,7 +325,6 @@
         FailureReasons = metrics.FailureReasons.ToList();
         FailedChartCount = metrics.FailedChartCount;
         ApprovedChartCount = metrics.ApprovedChartCount;
-        chartsDirty = true;
     }
 
     private async Task LoadGridAsync()
@@ -371,6 +380,7 @@
                     var md = await Orchestrator.RunDiagnosticAsync(tx, createdByUserId);
                     ShowDiagnostic(id, md ?? string.Empty);
                     await LoadMetricsAsync();
+                    chartsDirty = true;
                 }
                 catch (Exception exInner)
                 {
