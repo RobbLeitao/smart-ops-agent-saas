@@ -14,38 +14,28 @@
 <div class="dashboard-shell min-vh-100 py-5">
     <div class="container-fluid">
         <section class="dashboard-panel dashboard-hero mb-4">
-            <div class="d-flex flex-column flex-xl-row gap-3 justify-content-between align-items-xl-center">
+            <div class="d-flex flex-column flex-xl-row gap-3 justify-content-between align-items-xl-center dashboard-hero-inner">
                 <div>
                     <div class="dashboard-chip mb-3">
                         <i class="bi bi-broadcast"></i>
                         <span>Centro de operaciones de IA</span>
                     </div>
-                    <h2 class="mb-1 text-white">Control Console</h2>
-                    <p class="dashboard-chart-copy mb-0">Monitoreo y diagnóstico de transacciones en tiempo real.</p>
                 </div>
 
                 <div class="d-flex flex-wrap gap-2">
-                    <span class="dashboard-chip"><i class="bi bi-activity"></i><span>@DiagnosticsCount diagnósticos</span></span>
+                    <span class="dashboard-chip">
+                        <i class="bi bi-activity"></i>
+                        <span>@DiagnosticsCount diagnósticos</span>
+                        <button type="button" class="btn btn-sm btn-outline-light dashboard-chip-action" @onclick="OpenChartsModal">
+                            <i class="bi bi-graph-up"></i>
+                            <span>Ver gráficos</span>
+                        </button>
+                    </span>
                     <span class="dashboard-chip"><i class="bi bi-shield-check"></i><span>@SuccessRateDisplay aprobación</span></span>
                     <span class="dashboard-chip"><i class="bi bi-robot"></i><span>@UsefulPercentDisplay IA útil</span></span>
                 </div>
             </div>
         </section>
-
-        @if (isAdminUser)
-        {
-            <section class="dashboard-panel dashboard-toggle-card mb-4">
-                <div>
-                    <div class="dashboard-metric-label">Escala de datos</div>
-                    <div class="dashboard-metric-subtitle">Alterna entre fallidas o todos los registros para recalcular métricas y gráficos.</div>
-                </div>
-
-                <div class="form-check form-switch mb-0">
-                    <InputCheckbox class="form-check-input" id="showAllRecordsDashboard" @bind-Value="showAllRecords" @bind-Value:after="ReloadDashboardAsync" />
-                    <label class="form-check-label dashboard-chart-copy" for="showAllRecordsDashboard">Ver todos los registros</label>
-                </div>
-            </section>
-        }
 
         <section class="dashboard-kpi-grid mb-4">
             <article class="dashboard-panel dashboard-metric-card" style="--accent:#22d3ee;">
@@ -73,34 +63,6 @@
             </article>
         </section>
 
-        <section class="dashboard-chart-grid mb-4">
-            <article class="dashboard-panel dashboard-chart-card">
-                <div class="dashboard-chart-head">
-                    <div>
-                        <h3 class="dashboard-chart-title">Motivos de Falla Más Frecuentes</h3>
-                        <p class="dashboard-chart-copy mb-0">Distribución de los errores más comunes en el panel actual.</p>
-                    </div>
-                </div>
-
-                <div class="chart-host">
-                    <canvas id="failureReasonsChart"></canvas>
-                </div>
-            </article>
-
-            <article class="dashboard-panel dashboard-chart-card">
-                <div class="dashboard-chart-head">
-                    <div>
-                        <h3 class="dashboard-chart-title">Transacciones Aprobadas vs. Falladas</h3>
-                        <p class="dashboard-chart-copy mb-0">Comparativa directa entre aprobaciones y rechazos.</p>
-                    </div>
-                </div>
-
-                <div class="chart-host">
-                    <canvas id="transactionsSplitChart"></canvas>
-                </div>
-            </article>
-        </section>
-
         <section class="dashboard-panel dashboard-table-card">
             <div class="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-end mb-3">
                 <div>
@@ -109,7 +71,15 @@
                 </div>
 
                 <div>
-                    <input class="form-control dashboard-filter" placeholder="Filtrar por últimos 4 dígitos..." @bind="filterLast4" @bind:event="oninput" maxlength="4" pattern="\d*" inputmode="numeric" />
+                    <div class="dashboard-filter-row">
+                        <input class="form-control dashboard-filter" placeholder="Filtrar por últimos 4 dígitos..." @bind="filterLast4" @bind:event="oninput" maxlength="4" pattern="\d*" inputmode="numeric" />
+                        @if (isAdminUser)
+                        {
+                            <div class="form-check form-switch dashboard-inline-toggle mb-0" title="Ver todos los registros">
+                                <InputCheckbox class="form-check-input" id="showAllRecordsDashboard" @bind-Value="showAllRecords" @bind-Value:after="ReloadDashboardAsync" />
+                            </div>
+                        }
+                    </div>
                     <small class="dashboard-chart-copy">Escriba de 1 a 4 dígitos para filtrar en tiempo real (ej. 4, 43, 4532).</small>
                 </div>
             </div>
@@ -206,6 +176,49 @@
     </div>
 </div>
 
+@if (showChartsModal)
+{
+    <div class="dashboard-modal-backdrop" @onclick="CloseChartsModal">
+        <div class="dashboard-modal-shell" @onclick:stopPropagation="true">
+            <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                <div>
+                    <h3 class="dashboard-chart-title mb-1">Gráficos del dashboard</h3>
+                    <p class="dashboard-chart-copy mb-0">Motivos de falla y comparativa aprobadas vs. falladas.</p>
+                </div>
+                <button type="button" class="btn-close btn-close-white" aria-label="Close" @onclick="CloseChartsModal"></button>
+            </div>
+
+            <section class="dashboard-chart-grid dashboard-chart-grid-modal">
+                <article class="dashboard-panel dashboard-chart-card">
+                    <div class="dashboard-chart-head">
+                        <div>
+                            <h3 class="dashboard-chart-title">Motivos de Falla Más Frecuentes</h3>
+                            <p class="dashboard-chart-copy mb-0">Distribución de los errores más comunes en el panel actual.</p>
+                        </div>
+                    </div>
+
+                    <div class="chart-host chart-host-modal">
+                        <canvas id="failureReasonsChart"></canvas>
+                    </div>
+                </article>
+
+                <article class="dashboard-panel dashboard-chart-card">
+                    <div class="dashboard-chart-head">
+                        <div>
+                            <h3 class="dashboard-chart-title">Transacciones Aprobadas vs. Falladas</h3>
+                            <p class="dashboard-chart-copy mb-0">Comparativa directa entre aprobaciones y rechazos.</p>
+                        </div>
+                    </div>
+
+                    <div class="chart-host chart-host-modal">
+                        <canvas id="transactionsSplitChart"></canvas>
+                    </div>
+                </article>
+            </section>
+        </div>
+    </div>
+}
+
 @code {
     private List<Transaction>? allTransactions;
     private List<Transaction>? gridTransactions;
@@ -220,6 +233,7 @@
     private bool isAdminUser;
     private bool chartsDirty;
     private bool chartsRendering;
+    private bool showChartsModal;
     private string? currentUserId;
     private int SuccessRatePercent;
     private List<(string Reason, int Count)> FailureReasons = new();
@@ -273,7 +287,7 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!chartsDirty || chartsRendering)
+        if (!showChartsModal || !chartsDirty || chartsRendering)
         {
             return;
         }
@@ -303,6 +317,20 @@
         await LoadMetricsAsync();
         await LoadGridAsync();
         chartsDirty = true;
+    }
+
+    private async Task OpenChartsModal()
+    {
+        showChartsModal = true;
+        chartsDirty = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CloseChartsModal()
+    {
+        showChartsModal = false;
+        await JS.InvokeVoidAsync("dashboardCharts.destroy", "failureReasonsChart");
+        await JS.InvokeVoidAsync("dashboardCharts.destroy", "transactionsSplitChart");
     }
 
     private async Task LoadMetricsAsync()

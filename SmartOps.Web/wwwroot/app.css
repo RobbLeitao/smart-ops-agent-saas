@@ -269,6 +269,14 @@ a, .btn-link {
     overflow: hidden;
 }
 
+.dashboard-hero {
+    padding: 1.25rem 1.5rem;
+}
+
+.dashboard-hero-inner {
+    padding: 0.5rem 0.25rem;
+}
+
 .dashboard-kpi-grid,
 .dashboard-chart-grid {
     display: grid;
@@ -345,6 +353,17 @@ a, .btn-link {
     color: #cbd5e1;
 }
 
+.dashboard-chip-action {
+    margin-left: 0.4rem;
+    padding: 0.2rem 0.55rem;
+    border-color: rgba(103, 232, 249, 0.22);
+    color: #e2e8f0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+}
+
 .dashboard-toggle-card {
     padding: 1rem 1.25rem;
     display: flex;
@@ -354,8 +373,9 @@ a, .btn-link {
 }
 
 .dashboard-chart-card {
-    padding: 1.25rem;
-    min-height: 360px;
+    padding: 1.1rem;
+    min-height: 0;
+    height: 100%;
     display: flex;
     flex-direction: column;
     gap: 1rem;
@@ -381,13 +401,48 @@ a, .btn-link {
 
 .chart-host {
     position: relative;
-    min-height: 280px;
+    min-height: clamp(220px, 26vh, 320px);
     flex: 1;
 }
 
 .chart-host canvas {
     width: 100% !important;
     height: 100% !important;
+}
+
+.chart-host-modal {
+    min-height: clamp(240px, 31vh, 380px);
+}
+
+@media (max-width: 1199.98px) {
+    .dashboard-modal-shell {
+        width: min(92vw, 1400px);
+        height: min(92dvh, 1100px);
+    }
+
+    .chart-host-modal {
+        min-height: clamp(210px, 26vh, 320px);
+    }
+}
+
+@media (max-width: 767.98px) {
+    .dashboard-modal-shell {
+        width: 96vw;
+        height: 94dvh;
+        padding: 1rem;
+    }
+
+    .dashboard-chart-card {
+        padding: 1rem;
+    }
+
+    .chart-host-modal {
+        min-height: clamp(180px, 24vh, 280px);
+    }
+
+    .dashboard-filter-row {
+        width: 100%;
+    }
 }
 
 .dashboard-table-card {
@@ -448,6 +503,21 @@ a, .btn-link {
     color: #e6eef8;
 }
 
+.dashboard-filter-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: min(100%, 420px);
+}
+
+.dashboard-inline-toggle {
+    display: inline-flex;
+    align-items: center;
+    min-width: 2.75rem;
+    padding-left: 0.25rem;
+}
+
 .dashboard-filter::placeholder {
     color: #64748b;
 }
@@ -459,6 +529,44 @@ a, .btn-link {
     border: 1px dashed rgba(148, 163, 184, 0.2);
     border-radius: 1rem;
     background: rgba(15, 23, 42, 0.36);
+}
+
+.dashboard-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1060;
+    background: rgba(2, 6, 23, 0.78);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+}
+
+.dashboard-modal-shell {
+    width: min(75vw, 1400px);
+    height: min(90dvh, 1100px);
+    max-height: 90dvh;
+    overflow: hidden;
+    padding: 1.25rem;
+    background: linear-gradient(180deg, #171c26 0%, #11151b 100%);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 1rem;
+    box-shadow: 0 30px 80px rgba(2, 6, 23, 0.65);
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-chart-grid-modal {
+    grid-template-columns: 1fr 1fr;
+    flex: 1;
+    min-height: 0;
+}
+
+@media (max-width: 1199.98px) {
+    .dashboard-chart-grid-modal {
+        grid-template-columns: 1fr;
+    }
 }
 
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
