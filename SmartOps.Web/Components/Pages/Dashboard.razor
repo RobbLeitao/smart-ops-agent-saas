@@ -4,172 +4,204 @@
 @using SmartOps.Core.Entities
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.JSInterop
 @inject SmartOps.Infrastructure.Data.AppDbContext Db
 @inject SmartOps.Web.Services.DiagnosticOrchestratorService Orchestrator
 @inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
 
-<div class="min-vh-100 py-5" style="background-color:transparent;">
+<div class="dashboard-shell min-vh-100 py-5">
     <div class="container-fluid">
-        <div class="grid-dark p-4" style="background-color:#212835;">
-            <div class="d-flex justify-content-between align-items-center mb-4">
+        <section class="dashboard-panel dashboard-hero mb-4">
+            <div class="d-flex flex-column flex-xl-row gap-3 justify-content-between align-items-xl-center">
                 <div>
-                    <h2 class="mb-0 text-white">Centro de Operaciones de IA</h2>
-                    <small class="text-slate-400">Monitoreo y diagnóstico de transacciones</small>
+                    <div class="dashboard-chip mb-3">
+                        <i class="bi bi-broadcast"></i>
+                        <span>Centro de operaciones de IA</span>
+                    </div>
+                    <h2 class="mb-1 text-white">Control Console</h2>
+                    <p class="dashboard-chart-copy mb-0">Monitoreo y diagnóstico de transacciones en tiempo real.</p>
                 </div>
-                <div class="d-flex gap-3">
-                    <div class="p-3 bg-[#171c26] rounded shadow-sm text-center" style="min-width:140px;">
-                        <div class="text-slate-400 small">Transacciones Fallidas</div>
-                        <div class="h5 mb-0 text-white">@FailedTransactionsCount</div>
-                    </div>
-                    <div class="p-3 bg-[#171c26] rounded shadow-sm text-center" style="min-width:140px;">
-                        <div class="text-slate-400 small">Diagnósticos Realizados</div>
-                        <div class="h5 mb-0 text-white">@DiagnosticsCount</div>
-                    </div>
-                    <div class="p-3 bg-[#171c26] rounded shadow-sm text-center" style="min-width:140px;">
-                        <div class="text-slate-400 small">Estado del Kernel</div>
-                        <div class="h5 mb-0 text-emerald-400">Activo</div>
-                    </div>
-                    <div class="p-3 bg-[#171c26] rounded shadow-sm text-center" style="min-width:140px;">
-                        <div class="text-slate-400 small">% Diagnósticos Útiles</div>
-                        <div class="h5 mb-0 text-white">@UsefulPercentDisplay</div>
-                    </div>
+
+                <div class="d-flex flex-wrap gap-2">
+                    <span class="dashboard-chip"><i class="bi bi-activity"></i><span>@DiagnosticsCount diagnósticos</span></span>
+                    <span class="dashboard-chip"><i class="bi bi-shield-check"></i><span>@SuccessRateDisplay aprobación</span></span>
+                    <span class="dashboard-chip"><i class="bi bi-robot"></i><span>@UsefulPercentDisplay IA útil</span></span>
                 </div>
             </div>
+        </section>
 
-            <div class="row g-3 mb-2 align-items-stretch">
-                @if (isAdminUser)
-                {
-                    <div class="col-lg-4">
-                        <div class="p-3 bg-[#171c26] rounded h-100 d-flex align-items-center">
-                            <div class="form-check form-switch mb-0">
-                                <InputCheckbox class="form-check-input" id="showAllRecordsDashboard" @bind-Value="showAllRecords" @bind-Value:after="LoadGridAsync" />
-                                <label class="form-check-label text-slate-300" for="showAllRecordsDashboard">Ver todos los registros</label>
-                            </div>
-                        </div>
-                    </div>
-                }
-                <div class="@(isAdminUser ? "col-lg-3" : "col-lg-4")">
-                    <div class="p-3 bg-[#171c26] rounded h-100">
-                        <div class="text-slate-400 small mb-2">Tasa de aprobación</div>
-                        <div class="h4 text-white mb-0">@SuccessRateDisplay</div>
+        @if (isAdminUser)
+        {
+            <section class="dashboard-panel dashboard-toggle-card mb-4">
+                <div>
+                    <div class="dashboard-metric-label">Escala de datos</div>
+                    <div class="dashboard-metric-subtitle">Alterna entre fallidas o todos los registros para recalcular métricas y gráficos.</div>
+                </div>
+
+                <div class="form-check form-switch mb-0">
+                    <InputCheckbox class="form-check-input" id="showAllRecordsDashboard" @bind-Value="showAllRecords" @bind-Value:after="ReloadDashboardAsync" />
+                    <label class="form-check-label dashboard-chart-copy" for="showAllRecordsDashboard">Ver todos los registros</label>
+                </div>
+            </section>
+        }
+
+        <section class="dashboard-kpi-grid mb-4">
+            <article class="dashboard-panel dashboard-metric-card" style="--accent:#22d3ee;">
+                <div class="dashboard-metric-label">Tasa de Aprobación (%)</div>
+                <div class="dashboard-metric-value">@SuccessRateDisplay</div>
+                <div class="dashboard-metric-subtitle">Sobre el conjunto de transacciones cargado.</div>
+            </article>
+
+            <article class="dashboard-panel dashboard-metric-card" style="--accent:#ef4444;">
+                <div class="dashboard-metric-label">Transacciones Fallidas</div>
+                <div class="dashboard-metric-value">@FailedTransactionsCount</div>
+                <div class="dashboard-metric-subtitle">Casos listos para análisis o revisión.</div>
+            </article>
+
+            <article class="dashboard-panel dashboard-metric-card" style="--accent:#8b5cf6;">
+                <div class="dashboard-metric-label">Diagnósticos Realizados por IA</div>
+                <div class="dashboard-metric-value">@DiagnosticsCount</div>
+                <div class="dashboard-metric-subtitle">Resultados generados por el motor inteligente.</div>
+            </article>
+
+            <article class="dashboard-panel dashboard-metric-card" style="--accent:#14b8a6;">
+                <div class="dashboard-metric-label">Efectividad de IA (%)</div>
+                <div class="dashboard-metric-value">@UsefulPercentDisplay</div>
+                <div class="dashboard-metric-subtitle">Porcentaje de diagnósticos marcados como útiles.</div>
+            </article>
+        </section>
+
+        <section class="dashboard-chart-grid mb-4">
+            <article class="dashboard-panel dashboard-chart-card">
+                <div class="dashboard-chart-head">
+                    <div>
+                        <h3 class="dashboard-chart-title">Motivos de Falla Más Frecuentes</h3>
+                        <p class="dashboard-chart-copy mb-0">Distribución de los errores más comunes en el panel actual.</p>
                     </div>
                 </div>
-                <div class="@(isAdminUser ? "col-lg-5" : "col-lg-8")">
-                    <div class="p-3 bg-[#171c26] rounded h-100">
-                        <div class="text-slate-400 small mb-2">Motivos de falla más frecuentes</div>
-                        @if (FailureReasons.Count == 0)
-                        {
-                            <div class="text-slate-400">Sin datos.</div>
-                        }
-                        else
-                        {
-                            <div class="d-flex flex-wrap gap-2">
-                                @foreach (var reason in FailureReasons)
-                                {
-                                    <span class="badge rounded-pill" style="background:#2b3440;color:#e6eef8;">@reason.Reason (@reason.Count)</span>
-                                }
-                            </div>
-                        }
+
+                <div class="chart-host">
+                    <canvas id="failureReasonsChart"></canvas>
+                </div>
+            </article>
+
+            <article class="dashboard-panel dashboard-chart-card">
+                <div class="dashboard-chart-head">
+                    <div>
+                        <h3 class="dashboard-chart-title">Transacciones Aprobadas vs. Falladas</h3>
+                        <p class="dashboard-chart-copy mb-0">Comparativa directa entre aprobaciones y rechazos.</p>
                     </div>
                 </div>
-            </div>
 
-            <div class="mb-3">
-                <input class="form-control bg-[#11151b] border-0 text-slate-200" placeholder="Filtrar por últimos 4 dígitos..." @bind="filterLast4" @bind:event="oninput" maxlength="4" pattern="\d*" inputmode="numeric" style="max-width:320px;" />
-                <small class="text-slate-400">Escriba de 1 a 4 dígitos para filtrar en tiempo real (ej. 4, 43, 4532)</small>
+                <div class="chart-host">
+                    <canvas id="transactionsSplitChart"></canvas>
+                </div>
+            </article>
+        </section>
+
+        <section class="dashboard-panel dashboard-table-card">
+            <div class="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-end mb-3">
+                <div>
+                    <h3 class="dashboard-chart-title">Transacciones</h3>
+                    <p class="dashboard-chart-copy mb-0">Filtrá por los últimos 4 dígitos para investigar una tarjeta específica.</p>
+                </div>
+
+                <div>
+                    <input class="form-control dashboard-filter" placeholder="Filtrar por últimos 4 dígitos..." @bind="filterLast4" @bind:event="oninput" maxlength="4" pattern="\d*" inputmode="numeric" />
+                    <small class="dashboard-chart-copy">Escriba de 1 a 4 dígitos para filtrar en tiempo real (ej. 4, 43, 4532).</small>
+                </div>
             </div>
 
             @if (gridTransactions == null)
             {
-                <p>Loading...</p>
+                <div class="dashboard-empty-state">Loading...</div>
             }
             else if (!FilteredTransactions.Any() && !string.IsNullOrWhiteSpace(filterLast4))
             {
-                <div class="py-5 text-center text-slate-400">No se encontraron transacciones para la tarjeta ingresada.</div>
+                <div class="dashboard-empty-state">No se encontraron transacciones para la tarjeta ingresada.</div>
             }
             else if (gridTransactions.Count == 0)
             {
-                <p>No transactions found.</p>
+                <div class="dashboard-empty-state">No transactions found.</div>
             }
             else
             {
-                    <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
-                        <table class="table table-borderless align-middle" style="background:transparent;color:inherit;">
-                            <thead>
-                                                    <tr class="text-slate-400 small">
-                                    <th class="ps-3">Id</th>
-                                    <th>Amount</th>
-                                    <th>Currency</th>
-                                                        <th>Tarjeta</th>
-                                                        <th>Error</th>
-                                                        <th>OccurredAt</th>
-                                                        <th class="text-end pe-3">Actions</th>
-                                                    </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var t in FilteredTransactions)
-                                {
-                                    <tr class="align-middle">
-                                        <td class="ps-3"><strong>@t.Id</strong></td>
-                                        <td>@t.Amount</td>
-                                        <td>@t.Currency</td>
-                                        <td>
-                                            <span class="badge rounded-pill" style="background-color:#2b3440;color:#e6eef8;border:1px solid rgba(255,255,255,0.02);">
-                                                @FormatCard(t.CardLast4)
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <span class="badge rounded-pill" style="background-color:#2b3440;color:#e6eef8;border:1px solid rgba(255,255,255,0.02);">@t.Status</span>
-                                            @if (!string.IsNullOrWhiteSpace(t.ErrorMessage))
+                <div class="table-responsive dashboard-table-wrap">
+                    <table class="table table-borderless align-middle table-hover dashboard-table">
+                        <thead>
+                            <tr>
+                                <th class="ps-3">Id</th>
+                                <th>Amount</th>
+                                <th>Currency</th>
+                                <th>Tarjeta</th>
+                                <th>Error</th>
+                                <th>OccurredAt</th>
+                                <th class="text-end pe-3">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var t in FilteredTransactions)
+                            {
+                                <tr class="align-middle">
+                                    <td class="ps-3"><strong>@t.Id</strong></td>
+                                    <td>@t.Amount</td>
+                                    <td>@t.Currency</td>
+                                    <td>
+                                        <span class="badge rounded-pill dashboard-status-pill">@FormatCard(t.CardLast4)</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge rounded-pill dashboard-status-pill">@t.Status</span>
+                                        @if (!string.IsNullOrWhiteSpace(t.ErrorMessage))
+                                        {
+                                            <div class="dashboard-chart-copy small mt-1">@t.ErrorMessage</div>
+                                        }
+                                    </td>
+                                    <td>@t.OccurredAt?.ToString("g")</td>
+                                    <td class="text-end pe-3">
+                                        <button class="btn btn-ia" @onclick="() => AnalyzeAsync(t.Id)" disabled="@IsProcessing(t.Id)">
+                                            @if (IsProcessing(t.Id))
                                             {
-                                                <div class="text-slate-400 small">@t.ErrorMessage</div>
+                                                <span class="spinner-border spinner-sm" role="status" aria-hidden="true"></span>
                                             }
-                                        </td>
-                                        <td>@t.OccurredAt?.ToString("g")</td>
-                                        <td class="text-end pe-3">
-                                            <button class="btn btn-ia" @onclick="() => AnalyzeAsync(t.Id)" disabled="@IsProcessing(t.Id)">
-                                                @if (IsProcessing(t.Id))
+                                            else
+                                            {
+                                                <span>Analizar con IA</span>
+                                            }
+                                        </button>
+                                    </td>
+                                </tr>
+
+                                if (diagnostics.TryGetValue(t.Id, out var md) && !string.IsNullOrWhiteSpace(md))
+                                {
+                                    <tr>
+                                        <td colspan="7">
+                                            <div class="diagnostic-gem position-relative my-6 animate-fade-in max-w-7xl mx-auto">
+                                                <button type="button" class="btn-close position-absolute" style="right:12px;top:12px;filter:invert(1);" aria-label="Close" @onclick="() => CloseDiagnostic(t.Id)"></button>
+                                                <div class="diagnostic-content prose max-w-none leading-relaxed" style="font-family:Segoe UI, Roboto, Arial, sans-serif;">
+                                                    @((MarkupString)RenderMarkdown(md))
+                                                </div>
+
+                                                @if (technicalDetails.TryGetValue(t.Id, out var tech) && !string.IsNullOrWhiteSpace(tech))
                                                 {
-                                                    <span class="spinner-border spinner-sm" role="status" aria-hidden="true"></span>
+                                                    <div class="mt-4">
+                                                        <a href="#" class="text-slate-400" @onclick="(e) => ToggleTech(e, t.Id)">[+] Ver detalles técnicos</a>
+                                                        @if (showTech.Contains(t.Id))
+                                                        {
+                                                            <pre class="mt-2" style="background:#0f1724;padding:10px;border-radius:6px;font-size:12px;color:#d1d5db;">@tech</pre>
+                                                        }
+                                                    </div>
                                                 }
-                                                else
-                                                {
-                                                    <span>Analizar con IA</span>
-                                                }
-                                            </button>
+                                            </div>
                                         </td>
                                     </tr>
-
-                                    if (diagnostics.TryGetValue(t.Id, out var md) && !string.IsNullOrWhiteSpace(md))
-                                    {
-                                        <tr>
-                                            <td colspan="7">
-                                                <div class="diagnostic-gem position-relative my-6 animate-fade-in max-w-7xl mx-auto">
-                                                                                                                                                    <button type="button" class="btn-close position-absolute" style="right:12px;top:12px;filter:invert(1);" aria-label="Close" @onclick="() => CloseDiagnostic(t.Id)"></button>
-                                                                                                                                                    <div class="diagnostic-content prose max-w-none leading-relaxed" style="font-family:Segoe UI, Roboto, Arial, sans-serif;">
-                                                                                                        @((MarkupString)RenderMarkdown(md))
-                                                                                                    </div>
-
-                                                                                                    @if (technicalDetails.TryGetValue(t.Id, out var tech) && !string.IsNullOrWhiteSpace(tech))
-                                                                                                    {
-                                                                                                        <div class="mt-4">
-                                                                                                                                                            <a href="#" class="text-slate-400" @onclick="(e) => ToggleTech(e, t.Id)">[+] Ver detalles técnicos</a>
-                                                                                                            @if (showTech.Contains(t.Id))
-                                                                                                            {
-                                                                                                                                                                <pre class="mt-2" style="background:#0f1724;padding:10px;border-radius:6px;font-size:12px;color:#d1d5db;">@tech</pre>
-                                                                                                            }
-                                                                                                        </div>
-                                                                                                    }
-                                                                                                </div>
-                                            </td>
-                                        </tr>
-                                    }
                                 }
-                            </tbody>
-                        </table>
-                    </div>
+                            }
+                        </tbody>
+                    </table>
+                </div>
             }
-        </div>
+        </section>
     </div>
 </div>
 
@@ -179,10 +211,20 @@
     private List<Transaction>? failedTransactions;
     private int FailedTransactionsCount;
     private int DiagnosticsCount;
-    private Dictionary<int, bool> processing = new();
-    private Dictionary<int, string> diagnostics = new();
-    private Dictionary<int, string> technicalDetails = new();
-    private HashSet<int> showTech = new();
+    private int ApprovedTransactionsCount;
+    private int FailedChartCount;
+    private int ApprovedChartCount;
+    private int UsefulPercent;
+    private bool showAllRecords;
+    private bool isAdminUser;
+    private bool chartsDirty = true;
+    private string? currentUserId;
+    private int SuccessRatePercent;
+    private List<(string Reason, int Count)> FailureReasons = new();
+    private readonly Dictionary<int, bool> processing = new();
+    private readonly Dictionary<int, string> diagnostics = new();
+    private readonly Dictionary<int, string> technicalDetails = new();
+    private readonly HashSet<int> showTech = new();
     private string filterLast4 = string.Empty;
 
     private static string FormatCard(string? last4)
@@ -200,10 +242,12 @@
         get
         {
             var list = failedTransactions ?? Enumerable.Empty<Transaction>();
+
             if (showAllRecords)
             {
                 list = gridTransactions ?? Enumerable.Empty<Transaction>();
             }
+
             if (string.IsNullOrWhiteSpace(filterLast4))
             {
                 return list;
@@ -224,15 +268,32 @@
         await LoadGridAsync();
     }
 
-    private int UsefulPercent;
-    private bool showAllRecords;
-    private bool isAdminUser;
-    private string? currentUserId;
-    private int ApprovedTransactionsCount;
-    private int SuccessRatePercent;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender && !chartsDirty)
+        {
+            return;
+        }
+
+        chartsDirty = false;
+
+        try
+        {
+            await RefreshChartsAsync();
+        }
+        catch
+        {
+        }
+    }
+
     private string SuccessRateDisplay => SuccessRatePercent + "%";
-    private List<(string Reason, int Count)> FailureReasons = new();
     private string UsefulPercentDisplay => UsefulPercent < 0 ? "N/A" : UsefulPercent + "%";
+
+    private async Task ReloadDashboardAsync()
+    {
+        await LoadMetricsAsync();
+        await LoadGridAsync();
+    }
 
     private async Task LoadMetricsAsync()
     {
@@ -241,10 +302,10 @@
         currentUserId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         isAdminUser = user?.IsInRole("Auditor") == true || user?.IsInRole("Admin") == true;
 
-        var diagnostics = await Db.Diagnostics.ToListAsync();
+        var diagnosticsData = await Db.Diagnostics.ToListAsync();
         var transactions = await Db.Transactions.ToListAsync();
         var feedback = await Db.DiagnosticFeedback.ToListAsync();
-        var metrics = SmartOps.Web.Services.DashboardMetricsHelper.Build(transactions, feedback, diagnostics, false, currentUserId);
+        var metrics = SmartOps.Web.Services.DashboardMetricsHelper.Build(transactions, feedback, diagnosticsData, showAllRecords, currentUserId);
 
         FailedTransactionsCount = metrics.FailedTransactionsCount;
         DiagnosticsCount = metrics.DiagnosticsCount;
@@ -252,9 +313,10 @@
         SuccessRatePercent = metrics.SuccessRatePercent;
         UsefulPercent = metrics.UsefulPercent;
         FailureReasons = metrics.FailureReasons.ToList();
+        FailedChartCount = metrics.FailedChartCount;
+        ApprovedChartCount = metrics.ApprovedChartCount;
+        chartsDirty = true;
     }
-
-    private bool IsProcessing(int id) => processing.TryGetValue(id, out var v) && v;
 
     private async Task LoadGridAsync()
     {
@@ -263,10 +325,25 @@
         gridTransactions = showAllRecords ? allTransactions : failedTransactions;
     }
 
+    private async Task RefreshChartsAsync()
+    {
+        var failureLabels = FailureReasons.Select(x => x.Reason).ToArray();
+        var failureValues = FailureReasons.Select(x => x.Count).ToArray();
+
+        await JS.InvokeVoidAsync("dashboardCharts.renderDoughnut", "failureReasonsChart", failureLabels, failureValues);
+        await JS.InvokeVoidAsync(
+            "dashboardCharts.renderBar",
+            "transactionsSplitChart",
+            new[] { "Totales" },
+            new[] { ApprovedChartCount },
+            new[] { FailedChartCount });
+    }
+
+    private bool IsProcessing(int id) => processing.TryGetValue(id, out var v) && v;
+
     private async Task AnalyzeAsync(int id)
     {
         processing[id] = true;
-        // Clear previous outputs for this transaction so we always re-run fresh
         diagnostics[id] = string.Empty;
         technicalDetails[id] = string.Empty;
         showTech.Remove(id);
@@ -274,12 +351,8 @@
 
         try
         {
-            StateHasChanged();
-
-            // Simulate realistic delay so button spinner is visible in UI tests
             await Task.Delay(2500);
 
-            // Resolve the transaction and pass the full entity to the orchestrator.
             var tx = await Db.Transactions.FindAsync(id);
             if (tx == null)
             {
@@ -296,14 +369,12 @@
                         : null;
 
                     var md = await Orchestrator.RunDiagnosticAsync(tx, createdByUserId);
-                                        ShowDiagnostic(id, md ?? "");
-                    DiagnosticsCount = await Db.Diagnostics.CountAsync();
+                    ShowDiagnostic(id, md ?? string.Empty);
+                    await LoadMetricsAsync();
                 }
                 catch (Exception exInner)
                 {
-                    // Friendly business-facing message
                     diagnostics[id] = "⚠️ No logramos procesar el diagnóstico inteligente en este momento. Por favor, reintentá en unos instantes.";
-                    // Store the technical details for optional inspection
                     technicalDetails[id] = exInner.ToString();
                 }
             }
@@ -322,7 +393,6 @@
 
     private static Guid CreateDeterministicGuidForInt(int id)
     {
-        // Create a stable GUID from the int using MD5 hash of a namespace + id string
         var ns = System.Text.Encoding.UTF8.GetBytes("SmartOps.Transaction.IntMapping");
         var idBytes = System.Text.Encoding.UTF8.GetBytes(id.ToString());
         using var md5 = System.Security.Cryptography.MD5.Create();
@@ -332,78 +402,93 @@
 
     private string RenderMarkdown(string md)
     {
-            // Improved simple markdown renderer: headings, lists and paragraphs
-            if (string.IsNullOrWhiteSpace(md)) return string.Empty;
+        if (string.IsNullOrWhiteSpace(md))
+        {
+            return string.Empty;
+        }
 
-            var encoded = System.Net.WebUtility.HtmlEncode(md);
-            var lines = encoded.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            var sb = new System.Text.StringBuilder();
-            bool inList = false;
+        var encoded = System.Net.WebUtility.HtmlEncode(md);
+        var lines = encoded.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        var sb = new System.Text.StringBuilder();
+        var inList = false;
 
-            foreach (var raw in lines)
+        foreach (var raw in lines)
+        {
+            var line = raw.Trim();
+
+            if (line.StartsWith("## "))
             {
-                var line = raw.Trim();
-                // Headings
-                if (line.StartsWith("## "))
-                {
-                    if (inList)
-                    {
-                        sb.AppendLine("</ul>");
-                        inList = false;
-                    }
-                    sb.AppendLine($"<h4>{line.Substring(3).Trim()}</h4>");
-                    continue;
-                }
-
-                // List items
-                if (line.StartsWith("- "))
-                {
-                    if (!inList)
-                    {
-                        sb.AppendLine("<ul style=\"margin-left:1rem;padding-left:1rem\">\n");
-                        inList = true;
-                    }
-                    sb.AppendLine($"<li>{line.Substring(2).Trim()}</li>");
-                    continue;
-                }
-
-                // Paragraph / plain line
                 if (inList)
                 {
                     sb.AppendLine("</ul>");
                     inList = false;
                 }
 
-                sb.AppendLine($"<p>{line}</p>");
+                sb.AppendLine($"<h4>{line.Substring(3).Trim()}</h4>");
+                continue;
             }
 
-            if (inList) sb.AppendLine("</ul>");
-            return sb.ToString();
+            if (line.StartsWith("- "))
+            {
+                if (!inList)
+                {
+                    sb.AppendLine("<ul style=\"margin-left:1rem;padding-left:1rem\">\n");
+                    inList = true;
+                }
+
+                sb.AppendLine($"<li>{line.Substring(2).Trim()}</li>");
+                continue;
+            }
+
+            if (inList)
+            {
+                sb.AppendLine("</ul>");
+                inList = false;
+            }
+
+            sb.AppendLine($"<p>{line}</p>");
         }
+
+        if (inList)
+        {
+            sb.AppendLine("</ul>");
+        }
+
+        return sb.ToString();
+    }
 
     private void ShowDiagnostic(int id, string md)
     {
-            // Clear diagnostics for other transactions so only one panel is open at a time
-            var otherKeys = diagnostics.Keys.ToList();
-            foreach (var k in otherKeys)
+        var otherKeys = diagnostics.Keys.ToList();
+        foreach (var k in otherKeys)
+        {
+            if (k != id)
             {
-                if (k != id) diagnostics[k] = string.Empty;
+                diagnostics[k] = string.Empty;
             }
+        }
 
-            diagnostics[id] = md;
-            technicalDetails[id] = string.Empty;
+        diagnostics[id] = md;
+        technicalDetails[id] = string.Empty;
+        showTech.Remove(id);
+    }
+
+    private void CloseDiagnostic(int id)
+    {
+        diagnostics[id] = string.Empty;
+        technicalDetails.Remove(id);
+        showTech.Remove(id);
+    }
+
+    private void ToggleTech(Microsoft.AspNetCore.Components.Web.MouseEventArgs e, int id)
+    {
+        if (showTech.Contains(id))
+        {
             showTech.Remove(id);
         }
-
-        private void CloseDiagnostic(int id)
+        else
         {
-            diagnostics[id] = string.Empty;
-            technicalDetails.Remove(id);
-            showTech.Remove(id);
+            showTech.Add(id);
         }
-
-        private void ToggleTech(Microsoft.AspNetCore.Components.Web.MouseEventArgs e, int id)
-        {
-            if (showTech.Contains(id)) showTech.Remove(id); else showTech.Add(id);
-        }
+    }
 }

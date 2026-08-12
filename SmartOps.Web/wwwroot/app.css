@@ -246,6 +246,220 @@ a, .btn-link {
     line-height: 1.6;
 }
 
+.dashboard-shell {
+    background:
+        radial-gradient(circle at top left, rgba(34, 211, 238, 0.14), transparent 28%),
+        radial-gradient(circle at top right, rgba(139, 92, 246, 0.12), transparent 24%),
+        linear-gradient(180deg, #1a1f2c 0%, #11151d 100%);
+}
+
+.dashboard-panel {
+    background: linear-gradient(180deg, #171c26 0%, #11151b 100%);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 1rem;
+    box-shadow: 0 20px 60px rgba(2, 6, 23, 0.35);
+}
+
+.dashboard-hero,
+.dashboard-table-card,
+.dashboard-chart-card,
+.dashboard-toggle-card,
+.dashboard-metric-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.dashboard-kpi-grid,
+.dashboard-chart-grid {
+    display: grid;
+    gap: 1rem;
+}
+
+.dashboard-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dashboard-chart-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1199.98px) {
+    .dashboard-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dashboard-chart-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .dashboard-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.dashboard-metric-card {
+    min-height: 132px;
+    padding: 1.25rem;
+}
+
+.dashboard-metric-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent, #38bdf8), transparent);
+}
+
+.dashboard-metric-label {
+    color: #94a3b8;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+
+.dashboard-metric-value {
+    color: #f8fafc;
+    font-size: clamp(1.7rem, 3vw, 2.5rem);
+    font-weight: 700;
+    line-height: 1.1;
+    margin-top: 0.45rem;
+}
+
+.dashboard-metric-subtitle {
+    color: #cbd5e1;
+    font-size: 0.92rem;
+    margin-top: 0.35rem;
+}
+
+.dashboard-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.8rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid rgba(103, 232, 249, 0.16);
+    color: #cbd5e1;
+}
+
+.dashboard-toggle-card {
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.dashboard-chart-card {
+    padding: 1.25rem;
+    min-height: 360px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.dashboard-chart-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.dashboard-chart-title {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 1.05rem;
+}
+
+.dashboard-chart-copy {
+    color: #94a3b8;
+    font-size: 0.9rem;
+}
+
+.chart-host {
+    position: relative;
+    min-height: 280px;
+    flex: 1;
+}
+
+.chart-host canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.dashboard-table-card {
+    padding: 1.25rem;
+}
+
+.dashboard-table-wrap {
+    max-height: 420px;
+    overflow: auto;
+    border-radius: 0.9rem;
+}
+
+.dashboard-table {
+    margin-bottom: 0;
+    color: #e6eef8;
+}
+
+.dashboard-table thead th {
+    background: rgba(15, 23, 42, 0.88);
+    color: #cbd5e1;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.78rem;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.dashboard-table tbody tr {
+    background: rgba(17, 21, 27, 0.76);
+}
+
+.dashboard-table tbody tr + tr td {
+    border-top: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.dashboard-table tbody tr:hover {
+    background: rgba(24, 33, 49, 0.95);
+}
+
+.dashboard-table td,
+.dashboard-table th {
+    padding-top: 0.95rem;
+    padding-bottom: 0.95rem;
+}
+
+.dashboard-status-pill {
+    background: rgba(15, 23, 42, 0.86);
+    color: #e2e8f0;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.dashboard-filter {
+    width: min(100%, 320px);
+    background: #11151b;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    color: #e6eef8;
+}
+
+.dashboard-filter::placeholder {
+    color: #64748b;
+}
+
+.dashboard-empty-state {
+    padding: 2rem;
+    text-align: center;
+    color: #94a3b8;
+    border: 1px dashed rgba(148, 163, 184, 0.2);
+    border-radius: 1rem;
+    background: rgba(15, 23, 42, 0.36);
+}
 
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
   box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
