@@ -5,11 +5,13 @@
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.JSInterop
+@using Microsoft.AspNetCore.SignalR.Client
 @inject Microsoft.Extensions.Logging.ILogger<Dashboard> Logger
 @inject SmartOps.Infrastructure.Data.AppDbContext Db
 @inject SmartOps.Web.Services.DiagnosticOrchestratorService Orchestrator
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
+@inject NavigationManager NavigationManager
 
 <div class="dashboard-shell min-vh-100 py-5">
     <div class="container-fluid">
@@ -33,6 +35,10 @@
                     </span>
                     <span class="dashboard-chip"><i class="bi bi-shield-check"></i><span>@SuccessRateDisplay aprobación</span></span>
                     <span class="dashboard-chip"><i class="bi bi-robot"></i><span>@UsefulPercentDisplay IA útil</span></span>
+                </div>
+
+                <div class="ms-3">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleRealtime">@(realtimePaused ? "Reanudar notificaciones" : "Pausar notificaciones")</button>
                 </div>
             </div>
         </section>
@@ -176,8 +182,21 @@
     </div>
 </div>
 
-@if (showChartsModal)
-{
+    <!-- Toast container -->
+    <div class="position-fixed top-0 end-0 p-3" style="z-index:1050">
+        @foreach(var toast in toasts)
+        {
+            <div class="toast show mb-2 align-items-center text-bg-danger border-0" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body">@toast</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" aria-label="Close" @onclick="() => RemoveToast(toast)"></button>
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (showChartsModal)
+    {
     <div class="dashboard-modal-backdrop" @onclick="CloseChartsModal">
         <div class="dashboard-modal-shell" @onclick:stopPropagation="true">
             <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
@@ -243,6 +262,11 @@
     private readonly HashSet<int> showTech = new();
     private string filterLast4 = string.Empty;
 
+    // SignalR real-time
+    private HubConnection? hubConnection;
+    private bool realtimePaused = false;
+    private List<string> toasts = new();
+
     private static string FormatCard(string? last4)
     {
         if (string.IsNullOrWhiteSpace(last4))
@@ -283,6 +307,72 @@
         await LoadMetricsAsync();
         await LoadGridAsync();
         chartsDirty = true;
+
+        // Initialize SignalR connection
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(NavigationManager.ToAbsoluteUri("/hubs/transactions"))
+                .Build();
+
+            hubConnection.On<Transaction>("ReceiveTransaction", async (tx) =>
+            {
+                if (realtimePaused) return;
+
+                // Prepend to lists
+                allTransactions ??= new List<Transaction>();
+                gridTransactions ??= new List<Transaction>();
+                failedTransactions ??= new List<Transaction>();
+
+                allTransactions.Insert(0, tx);
+
+                if (string.Equals(tx.Status, "Failed", StringComparison.OrdinalIgnoreCase))
+                {
+                    failedTransactions.Insert(0, tx);
+                }
+
+                if (!showAllRecords)
+                {
+                    gridTransactions = failedTransactions.ToList();
+                }
+                else
+                {
+                    gridTransactions.Insert(0, tx);
+                }
+
+                // Update metrics incrementally
+                if (string.Equals(tx.Status, "Failed", StringComparison.OrdinalIgnoreCase))
+                {
+                    FailedTransactionsCount++;
+                    FailedChartCount++;
+                }
+                else
+                {
+                    ApprovedTransactionsCount++;
+                    ApprovedChartCount++;
+                }
+
+                // Total success rate recalculation (simple approximation)
+                var total = (ApprovedTransactionsCount + FailedTransactionsCount);
+                SuccessRatePercent = total == 0 ? 0 : (int)Math.Round(ApprovedTransactionsCount * 100.0 / total);
+
+                // Toast for failures
+                if (!string.IsNullOrWhiteSpace(tx.ErrorMessage))
+                {
+                    toasts.Insert(0, $"Transacción {tx.Id} falló: {tx.ErrorMessage}");
+                    // auto-remove after 8s
+                    _ = Task.Delay(8000).ContinueWith(_ => { _ = InvokeAsync(() => { if (toasts.Contains(toasts.First())) toasts.RemoveAt(0); StateHasChanged(); }); });
+                }
+
+                await InvokeAsync(StateHasChanged);
+            });
+
+            await hubConnection.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to start SignalR connection for dashboard.");
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -307,6 +397,16 @@
         {
             chartsRendering = false;
         }
+    }
+
+    private void ToggleRealtime()
+    {
+        realtimePaused = !realtimePaused;
+    }
+
+    private void RemoveToast(string t)
+    {
+        toasts.Remove(t);
     }
 
     private string SuccessRateDisplay => SuccessRatePercent + "%";

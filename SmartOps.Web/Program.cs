@@ -167,6 +167,11 @@ builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticOrchestratorService>(
 
 // Register ITransactionAnalyzer abstraction and choose implementation based on configuration
 var openAiSection = builder.Configuration.GetSection("OpenAI");
+
+// Register TransactionNotifier which bridges publisher events to SignalR
+builder.Services.AddSingleton<SmartOps.Web.Services.TransactionNotifier>();
+// Ensure HubContext is available via SignalR server support; SignalR is included in ASP.NET Core
+builder.Services.AddSignalR();
 var openAiKey = openAiSection.GetValue<string>("ApiKey");
 if (!string.IsNullOrWhiteSpace(openAiKey))
 {
@@ -180,6 +185,32 @@ else
 }
 
 // Proceed with building the app further below...
+
+// Register transaction publisher provider based on configuration (Simulator | External)
+var txSection = builder.Configuration.GetSection("TransactionSettings");
+var txProvider = txSection.GetValue<string>("Provider") ?? "Simulator";
+var txInterval = txSection.GetValue<int?>("IntervalSeconds") ?? 8;
+
+// Bind settings for services that need them
+builder.Services.Configure<SmartOps.Infrastructure.TransactionSettings>(opt =>
+{
+    opt.Provider = txProvider;
+    opt.IntervalSeconds = txInterval;
+});
+
+if (txProvider.Equals("Simulator", StringComparison.OrdinalIgnoreCase))
+{
+    // Register simulator as singleton publisher and hosted service
+    builder.Services.AddSingleton<SmartOps.Infrastructure.SimulatorTransactionService>();
+    builder.Services.AddSingleton<SmartOps.Core.Interfaces.ITransactionPublisher>(sp => sp.GetRequiredService<SmartOps.Infrastructure.SimulatorTransactionService>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<SmartOps.Infrastructure.SimulatorTransactionService>());
+}
+else
+{
+    // Fallback: register a no-op publisher so DI resolutions succeed
+    builder.Services.AddSingleton<SmartOps.Infrastructure.NoopTransactionPublisher>();
+    builder.Services.AddSingleton<SmartOps.Core.Interfaces.ITransactionPublisher>(sp => sp.GetRequiredService<SmartOps.Infrastructure.NoopTransactionPublisher>());
+}
 
 // Add Identity and auth services
 builder.Services.AddIdentity<SmartOps.Infrastructure.Data.ApplicationUser, Microsoft.AspNetCore.Identity.IdentityRole>(options =>
@@ -365,6 +396,9 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+// Map SignalR hub for transactions
+app.MapHub<SmartOps.Web.Hubs.TransactionHub>("/hubs/transactions");
 
 // Minimal account endpoints for login to set cookies outside the Blazor circuit
 app.MapPost("/account/login", async (HttpContext http, Microsoft.AspNetCore.Identity.UserManager<SmartOps.Infrastructure.Data.ApplicationUser> userManager, Microsoft.AspNetCore.Identity.SignInManager<SmartOps.Infrastructure.Data.ApplicationUser> signInManager) =>
