@@ -172,6 +172,10 @@ var openAiSection = builder.Configuration.GetSection("OpenAI");
 builder.Services.AddSingleton<SmartOps.Web.Services.TransactionNotifier>();
 // Ensure HubContext is available via SignalR server support; SignalR is included in ASP.NET Core
 builder.Services.AddSignalR();
+
+// Enable verbose SignalR logging to surface InvalidDataException stack traces in Output window
+builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR", LogLevel.Debug);
+builder.Logging.AddFilter("Microsoft.AspNetCore.Http.Connections", LogLevel.Debug);
 var openAiKey = openAiSection.GetValue<string>("ApiKey");
 if (!string.IsNullOrWhiteSpace(openAiKey))
 {
@@ -285,6 +289,13 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 });
 
 var app = builder.Build();
+
+// Debug endpoint to capture client-side clicks and report to server logs
+app.MapPost("/api/debug/click", async (HttpContext http, ILogger<Program> logger) =>
+{
+    logger.LogInformation("/api/debug/click received from {RemoteIp}", http.Connection.RemoteIpAddress);
+    await http.Response.WriteAsync("ok");
+});
 
 // Ensure the database schema exists on startup
 using (var scope = app.Services.CreateScope())

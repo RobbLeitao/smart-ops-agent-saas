@@ -40,7 +40,7 @@
                         </nav>
 
             <div class="ms-auto text-slate-400 small d-flex align-items-center gap-3">
-                <NotificationBell />
+                <NotificationBell @rendermode="InteractiveServer" />
                 <div class="text-slate-400 small me-3">Centro de Operaciones</div>
                 @if (authState != null && authState.User.Identity != null && authState.User.Identity.IsAuthenticated)
                 {

@@ -35,24 +35,12 @@ public class TransactionNotifier : IDisposable
         {
             try
             {
-                await _hubContext.Clients.All.SendAsync("ReceiveTransaction", e.Transaction);
-                _logger.LogInformation("Notified clients about transaction {Id}", e.Transaction.Id);
+                // Send only the primitive ID to avoid JSON serialization errors with EF entity graphs
+                var txId = e.Transaction.Id;
+                await _hubContext.Clients.All.SendAsync("ReceiveTransaction", txId);
+                _logger.LogInformation("Notified clients about transaction {Id}", txId);
 
-                                // Also emit a light-weight notification event so header bell updates immediately
-                                try
-                                {
-                                    var notificationPayload = new {
-                                        TransactionId = e.Transaction.Id,
-                                        Title = $"Transacción {e.Transaction.Id} falló",
-                                        Message = e.Transaction.ErrorMessage ?? string.Empty,
-                                        CreatedAt = DateTime.UtcNow
-                                    };
-                                    await _hubContext.Clients.All.SendAsync("NotificationCreated", notificationPayload);
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger.LogError(ex, "Failed to send NotificationCreated event for transaction {Id}", e.Transaction.Id);
-                                }
+                await _hubContext.Clients.All.SendAsync("NotificationCreated", txId);
             }
             catch (Exception ex)
             {

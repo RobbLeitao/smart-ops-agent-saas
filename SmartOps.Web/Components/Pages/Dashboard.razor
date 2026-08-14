@@ -119,7 +119,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var t in FilteredTransactions)
+                            @foreach (var t in FilteredTransactions.ToList())
                             {
                                 <tr class="align-middle">
                                     <td class="ps-3"><strong>@t.Id</strong></td>
@@ -185,7 +185,7 @@
 
     <!-- Toast container -->
     <div class="toasts-host p-3 position-fixed" style="right:24px;bottom:24px;z-index:9999;">
-        @foreach(var toast in toasts)
+        @foreach(var toast in toasts.ToList())
         {
             <div class="mb-2" style="max-width:360px;">
                 <div class="p-3" style="background:rgba(30,30,45,0.95);border:1px solid rgba(255,80,80,0.12);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.5);color:#fff;">
@@ -313,79 +313,82 @@
         await LoadMetricsAsync();
         await LoadGridAsync();
         chartsDirty = true;
-
-        // Initialize SignalR connection (guard: skip during SSR pre-render pass)
-        if (hubConnection == null)
-        try
-        {
-            hubConnection = new HubConnectionBuilder()
-                .WithUrl(NavigationManager.ToAbsoluteUri("/hubs/transactions"))
-                .WithAutomaticReconnect()
-                .Build();
-
-            hubConnection.On<Transaction>("ReceiveTransaction", async (tx) =>
-            {
-                if (realtimePaused) return;
-
-                // Prepend to lists
-                allTransactions ??= new List<Transaction>();
-                gridTransactions ??= new List<Transaction>();
-                failedTransactions ??= new List<Transaction>();
-
-                allTransactions.Insert(0, tx);
-
-                if (string.Equals(tx.Status, "Failed", StringComparison.OrdinalIgnoreCase))
-                {
-                    failedTransactions.Insert(0, tx);
-                }
-
-                if (!showAllRecords)
-                {
-                    gridTransactions = failedTransactions.ToList();
-                }
-                else
-                {
-                    gridTransactions.Insert(0, tx);
-                }
-
-                // Update metrics incrementally
-                if (string.Equals(tx.Status, "Failed", StringComparison.OrdinalIgnoreCase))
-                {
-                    FailedTransactionsCount++;
-                    FailedChartCount++;
-                }
-                else
-                {
-                    ApprovedTransactionsCount++;
-                    ApprovedChartCount++;
-                }
-
-                // Total success rate recalculation (simple approximation)
-                var total = (ApprovedTransactionsCount + FailedTransactionsCount);
-                SuccessRatePercent = total == 0 ? 0 : (int)Math.Round(ApprovedTransactionsCount * 100.0 / total);
-
-                // Toast for failures
-                if (!string.IsNullOrWhiteSpace(tx.ErrorMessage))
-                {
-                    var toastMsg = $"Transacción {tx.Id} falló: {tx.ErrorMessage}";
-                    toasts.Insert(0, toastMsg);
-                    var captured = toastMsg;
-                    _ = Task.Delay(8000).ContinueWith(_ => { _ = InvokeAsync(() => { toasts.Remove(captured); StateHasChanged(); }); });
-                }
-
-                await InvokeAsync(StateHasChanged);
-            });
-
-            await hubConnection.StartAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Failed to start SignalR connection for dashboard.");
-        }
+        // Hub setup moved to OnAfterRenderAsync(firstRender) to avoid InvalidCastException
+        // during SSR pre-render (InvokeAsync has no RendererSynchronizationContext in SSR)
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender && hubConnection == null)
+        {
+            try
+            {
+                hubConnection = new HubConnectionBuilder()
+                    .WithUrl(NavigationManager.ToAbsoluteUri("/hubs/transactions"))
+                    .WithAutomaticReconnect()
+                    .Build();
+
+                hubConnection.On<int>("ReceiveTransaction", async (txId) =>
+                {
+                    if (realtimePaused) return;
+
+                    var tx = await Db.Transactions.FindAsync(txId);
+                    if (tx == null) return;
+
+                    await InvokeAsync(() =>
+                    {
+                        allTransactions ??= new List<Transaction>();
+                        gridTransactions ??= new List<Transaction>();
+                        failedTransactions ??= new List<Transaction>();
+
+                        allTransactions.Insert(0, tx);
+
+                        if (string.Equals(tx.Status, "Failed", StringComparison.OrdinalIgnoreCase))
+                            failedTransactions.Insert(0, tx);
+
+                        if (!showAllRecords)
+                            gridTransactions = failedTransactions.ToList();
+                        else
+                            gridTransactions.Insert(0, tx);
+
+                        if (string.Equals(tx.Status, "Failed", StringComparison.OrdinalIgnoreCase))
+                        {
+                            FailedTransactionsCount++;
+                            FailedChartCount++;
+                        }
+                        else
+                        {
+                            ApprovedTransactionsCount++;
+                            ApprovedChartCount++;
+                        }
+
+                        var total = ApprovedTransactionsCount + FailedTransactionsCount;
+                        SuccessRatePercent = total == 0 ? 0 : (int)Math.Round(ApprovedTransactionsCount * 100.0 / total);
+
+                        if (!string.IsNullOrWhiteSpace(tx.ErrorMessage))
+                        {
+                            var toastMsg = $"Transacción {tx.Id} falló: {tx.ErrorMessage}";
+                            toasts.Insert(0, toastMsg);
+                            var captured = toastMsg;
+                            _ = Task.Delay(8000).ContinueWith(_ =>
+                                InvokeAsync(() => { toasts.Remove(captured); StateHasChanged(); }));
+                        }
+
+                        StateHasChanged();
+                    });
+                });
+
+                // Absorb NotificationCreated to prevent unhandled-message warnings
+                hubConnection.On<int>("NotificationCreated", _ => Task.CompletedTask);
+
+                await hubConnection.StartAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to start SignalR connection for dashboard.");
+            }
+        }
+
         if (!showChartsModal || !chartsDirty || chartsRendering)
         {
             return;
