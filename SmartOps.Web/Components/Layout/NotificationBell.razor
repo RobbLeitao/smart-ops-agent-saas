@@ -16,11 +16,11 @@
     </button>
     @if (open)
     {
-        <div class="card shadow" style="position:absolute;right:0;top:36px;width:320px;z-index:2000;">
+        <div class="card shadow" style="position:absolute;right:0;top:36px;width:320px;z-index:2000;" @onclick:stopPropagation>
             <div class="card-body p-2">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <strong>Notificaciones</strong>
-                    <button class="btn btn-link btn-sm" @onclick="MarkAllRead">Marcar todas como leídas</button>
+                    <button class="btn btn-link btn-sm" @onclick:stopPropagation @onclick="MarkAllRead">Marcar todas como leídas</button>
                 </div>
                 <div style="max-height:320px;overflow:auto;">
                     @foreach(var n in notifications)
@@ -42,7 +42,8 @@
                                     {
                                         <span class="badge bg-primary">Nuevo</span>
                                     }
-                                    <button class="btn btn-sm btn-outline-primary btn-xs" @onclick="() => Analyze(n.TransactionId)">Analizar con IA</button>
+                                    <button class="btn btn-sm btn-outline-primary btn-xs" @onclick:stopPropagation @onclick="() => Analyze(n.TransactionId, n.Id)">Analizar con IA</button>
+                                    <button class="btn btn-sm btn-link" @onclick:stopPropagation @onclick="() => MarkAsRead(n.Id)">Marcar leída</button>
                                 </div>
                             </div>
                         </div>
@@ -58,24 +59,24 @@
     private int UnreadCount = 0;
     private bool open = false;
     private HubConnection? hubConnection;
+    private readonly SemaphoreSlim _refreshLock = new(1,1);
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadNotificationsAsync();
+                await LoadNotificationsAsync();
 
-        hubConnection = new HubConnectionBuilder()
-            .WithUrl(NavigationManager.ToAbsoluteUri("/hubs/transactions"))
-            .WithAutomaticReconnect()
-            .Build();
+                hubConnection = new HubConnectionBuilder()
+                    .WithUrl(NavigationManager.ToAbsoluteUri("/hubs/transactions"))
+                    .WithAutomaticReconnect()
+                    .Build();
 
-        hubConnection.On<Transaction>("ReceiveTransaction", async (tx) =>
-        {
-            if (tx != null && string.Equals(tx.Status, "Failed", StringComparison.OrdinalIgnoreCase))
-            {
-                await InvokeAsync(async () =>
+                hubConnection.On<Transaction>("ReceiveTransaction", async (tx) =>
                 {
-                    await LoadNotificationsAsync();
-                    StateHasChanged();
+                    if (tx != null && string.Equals(tx.Status, "Failed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        await InvokeAsync(async () =>
+                        {
+                            await SafeRefreshAsync();
                 });
             }
         });
@@ -85,64 +86,99 @@
                 {
                     await InvokeAsync(async () =>
                     {
-                        // Refresh from DB to keep authoritative count (avoid races)
-                        await LoadNotificationsAsync();
-                        StateHasChanged();
+                        await SafeRefreshAsync();
                     });
                 });
 
-        try { await hubConnection.StartAsync(); } catch(Exception ex) { Logger.LogWarning(ex, "Failed to start hub in NotificationBell"); }
+                try { await hubConnection.StartAsync(); } catch(Exception ex) { Logger.LogWarning(ex, "Failed to start hub in NotificationBell"); }
+    }
+
+    private async Task SafeRefreshAsync()
+    {
+                await _refreshLock.WaitAsync();
+                try
+                {
+                    await LoadNotificationsAsync();
+                    StateHasChanged();
+                }
+                finally
+                {
+                    _refreshLock.Release();
+                }
     }
 
     private async Task LoadNotificationsAsync()
     {
-        notifications = Db.Notifications.OrderByDescending(n => n.CreatedAt).Take(50).ToList();
-        UnreadCount = Db.Notifications.Count(n => !n.IsRead);
+                // Use fresh queries; DbContext is scoped to the circuit and should be safe for simple reads here
+                notifications = await Task.Run(() => Db.Notifications.OrderByDescending(n => n.CreatedAt).Take(50).ToList());
+                UnreadCount = await Task.Run(() => Db.Notifications.Count(n => !n.IsRead));
     }
 
-    private void Toggle()
+    private async Task Toggle()
     {
-        open = !open;
+                open = !open;
+                if (open)
+                {
+                    // Ensure latest items when opening
+                    await SafeRefreshAsync();
+                }
     }
 
     private string GetLast4(int? txId)
     {
-        if (txId == null) return "----";
-        var tx = Db.Transactions.Find(txId.Value);
-        return tx?.CardLast4 ?? "----";
+                if (txId == null) return "----";
+                var tx = Db.Transactions.Find(txId.Value);
+                return tx?.CardLast4 ?? "----";
     }
 
     private string GetAgo(DateTime dt)
     {
-        var span = DateTime.UtcNow - dt;
-        if (span.TotalMinutes < 1) return "Ahora";
-        if (span.TotalMinutes < 60) return $"Hace {(int)span.TotalMinutes} min";
-        if (span.TotalHours < 24) return $"Hace {(int)span.TotalHours} h";
-        return $"Hace {(int)span.TotalDays} d";
+                var span = DateTime.UtcNow - dt;
+                if (span.TotalMinutes < 1) return "Ahora";
+                if (span.TotalMinutes < 60) return $"Hace {(int)span.TotalMinutes} min";
+                if (span.TotalHours < 24) return $"Hace {(int)span.TotalHours} h";
+                return $"Hace {(int)span.TotalDays} d";
     }
 
     private async Task MarkAllRead()
     {
-        var list = Db.Notifications.Where(n => !n.IsRead).ToList();
-        foreach(var n in list) n.IsRead = true;
-        Db.SaveChanges();
-        await LoadNotificationsAsync();
+                var list = Db.Notifications.Where(n => !n.IsRead).ToList();
+                foreach(var n in list) n.IsRead = true;
+                Db.SaveChanges();
+                await SafeRefreshAsync();
     }
 
-    private void Analyze(int? txId)
+    private async Task MarkAsRead(int id)
     {
-        if (txId != null)
-        {
-            // Navigate to transaction analysis or open modal; for now navigate to Dashboard and scroll to id
-            NavigationManager.NavigateTo($"/#tx{txId}");
-        }
+                var n = Db.Notifications.Find(id);
+                if (n != null && !n.IsRead)
+                {
+                    n.IsRead = true;
+                    Db.SaveChanges();
+                    await SafeRefreshAsync();
+                }
+    }
+
+    private async Task Analyze(int? txId, int? notificationId = null)
+    {
+                if (notificationId.HasValue)
+                {
+                    await MarkAsRead(notificationId.Value);
+                }
+
+                if (txId != null)
+                {
+                    // Navigate to transaction analysis or open modal; for now navigate to Dashboard and scroll to id
+                    NavigationManager.NavigateTo($"/#tx{txId}");
+                }
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (hubConnection != null)
-        {
-            await hubConnection.DisposeAsync();
-        }
+                if (hubConnection != null)
+                {
+                    await hubConnection.DisposeAsync();
+                }
+                _refreshLock.Dispose();
     }
 }
