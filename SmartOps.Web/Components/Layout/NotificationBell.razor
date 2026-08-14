@@ -4,6 +4,7 @@
 @inject NavigationManager NavigationManager
 @inject Microsoft.Extensions.Logging.ILogger<NotificationBell> Logger
 @using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.EntityFrameworkCore
 @implements IAsyncDisposable
 
 <div class="dropdown">
@@ -109,9 +110,9 @@
 
     private async Task LoadNotificationsAsync()
     {
-                // Use fresh queries; DbContext is scoped to the circuit and should be safe for simple reads here
-                notifications = await Task.Run(() => Db.Notifications.OrderByDescending(n => n.CreatedAt).Take(50).ToList());
-                UnreadCount = await Task.Run(() => Db.Notifications.Count(n => !n.IsRead));
+                // Use EF async methods directly on the scoped DbContext to avoid concurrent thread access
+                notifications = await Db.Notifications.OrderByDescending(n => n.CreatedAt).Take(50).ToListAsync();
+                UnreadCount = await Db.Notifications.CountAsync(n => !n.IsRead);
     }
 
     private async Task Toggle()
