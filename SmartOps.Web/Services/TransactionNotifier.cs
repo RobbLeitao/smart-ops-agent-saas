@@ -20,9 +20,13 @@ public class TransactionNotifier : IDisposable
         _publisher = publisher;
         _logger = logger;
 
-        // Subscribe to publisher events
-        _publisher.OnTransactionCreated += Publisher_OnTransactionCreated;
-    }
+            _logger.LogInformation("TransactionNotifier constructed. Publisher is {HasPublisher}", _publisher != null);
+
+            // Subscribe to publisher events
+            _publisher.OnTransactionCreated += Publisher_OnTransactionCreated;
+
+            _logger.LogInformation("TransactionNotifier subscribed to publisher events.");
+        }
 
     private void Publisher_OnTransactionCreated(object? sender, TransactionEventArgs e)
     {

@@ -1,6 +1,7 @@
 @page "/"
 @rendermode InteractiveServer
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@implements IAsyncDisposable
 @using SmartOps.Core.Entities
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Components.Authorization
@@ -183,13 +184,18 @@
 </div>
 
     <!-- Toast container -->
-    <div class="position-fixed top-0 end-0 p-3" style="z-index:1050">
+    <div class="toasts-host p-3 position-fixed" style="right:24px;bottom:24px;z-index:9999;">
         @foreach(var toast in toasts)
         {
-            <div class="toast show mb-2 align-items-center text-bg-danger border-0" role="alert">
-                <div class="d-flex">
-                    <div class="toast-body">@toast</div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" aria-label="Close" @onclick="() => RemoveToast(toast)"></button>
+            <div class="mb-2" style="max-width:360px;">
+                <div class="p-3" style="background:rgba(30,30,45,0.95);border:1px solid rgba(255,80,80,0.12);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.5);color:#fff;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="small text-muted">Notificación</div>
+                            <div>@toast</div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white ms-2" aria-label="Close" @onclick="() => RemoveToast(toast)"></button>
+                    </div>
                 </div>
             </div>
         }
@@ -308,11 +314,13 @@
         await LoadGridAsync();
         chartsDirty = true;
 
-        // Initialize SignalR connection
+        // Initialize SignalR connection (guard: skip during SSR pre-render pass)
+        if (hubConnection == null)
         try
         {
             hubConnection = new HubConnectionBuilder()
                 .WithUrl(NavigationManager.ToAbsoluteUri("/hubs/transactions"))
+                .WithAutomaticReconnect()
                 .Build();
 
             hubConnection.On<Transaction>("ReceiveTransaction", async (tx) =>
@@ -359,9 +367,10 @@
                 // Toast for failures
                 if (!string.IsNullOrWhiteSpace(tx.ErrorMessage))
                 {
-                    toasts.Insert(0, $"Transacción {tx.Id} falló: {tx.ErrorMessage}");
-                    // auto-remove after 8s
-                    _ = Task.Delay(8000).ContinueWith(_ => { _ = InvokeAsync(() => { if (toasts.Contains(toasts.First())) toasts.RemoveAt(0); StateHasChanged(); }); });
+                    var toastMsg = $"Transacción {tx.Id} falló: {tx.ErrorMessage}";
+                    toasts.Insert(0, toastMsg);
+                    var captured = toastMsg;
+                    _ = Task.Delay(8000).ContinueWith(_ => { _ = InvokeAsync(() => { toasts.Remove(captured); StateHasChanged(); }); });
                 }
 
                 await InvokeAsync(StateHasChanged);
@@ -628,5 +637,11 @@
         {
             showTech.Add(id);
         }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+            await hubConnection.DisposeAsync();
     }
 }

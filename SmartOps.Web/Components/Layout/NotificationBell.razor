@@ -1,0 +1,136 @@
+@using SmartOps.Infrastructure.Data
+@using SmartOps.Core.Entities
+@inject AppDbContext Db
+@inject NavigationManager NavigationManager
+@inject Microsoft.Extensions.Logging.ILogger<NotificationBell> Logger
+@implements IAsyncDisposable
+
+<div class="dropdown">
+    <button class="btn btn-sm position-relative" @onclick="Toggle">
+        <i class="bi bi-bell" style="font-size:18px;color:#cbd5e1"></i>
+        @if (UnreadCount > 0)
+        {
+            <span class="badge bg-danger position-absolute" style="top:-6px;right:-6px">@UnreadCount</span>
+        }
+    </button>
+    @if (open)
+    {
+        <div class="card shadow" style="position:absolute;right:0;top:36px;width:320px;z-index:2000;">
+            <div class="card-body p-2">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <strong>Notificaciones</strong>
+                    <button class="btn btn-link btn-sm" @onclick="MarkAllRead">Marcar todas como leídas</button>
+                </div>
+                <div style="max-height:320px;overflow:auto;">
+                    @foreach(var n in notifications)
+                    {
+                        <div class="d-flex align-items-start gap-2 p-2 mb-1" style="border-bottom:1px solid rgba(255,255,255,0.03);">
+                            <div style="width:36px;height:36px;border-radius:8px;background:#1f2937;display:flex;align-items:center;justify-content:center;">
+                                <i class="bi bi-exclamation-circle text-danger"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <div class="small">@n.Title</div>
+                                        <div class="small text-muted">Tarjeta •••• @GetLast4(n.TransactionId) — @n.Message</div>
+                                    </div>
+                                    <div class="text-muted small">@GetAgo(n.CreatedAt)</div>
+                                </div>
+                                <div class="mt-1 d-flex gap-2">
+                                    @if (!n.IsRead)
+                                    {
+                                        <span class="badge bg-primary">Nuevo</span>
+                                    }
+                                    <button class="btn btn-sm btn-outline-primary btn-xs" @onclick="() => Analyze(n.TransactionId)">Analizar con IA</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Notification> notifications = new();
+    private int UnreadCount = 0;
+    private bool open = false;
+    private HubConnection? hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadNotificationsAsync();
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/hubs/transactions"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        hubConnection.On<Transaction>("ReceiveTransaction", async (tx) =>
+        {
+            if (tx != null && string.Equals(tx.Status, "Failed", StringComparison.OrdinalIgnoreCase))
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadNotificationsAsync();
+                    StateHasChanged();
+                });
+            }
+        });
+
+        try { await hubConnection.StartAsync(); } catch(Exception ex) { Logger.LogWarning(ex, "Failed to start hub in NotificationBell"); }
+    }
+
+    private async Task LoadNotificationsAsync()
+    {
+        notifications = Db.Notifications.OrderByDescending(n => n.CreatedAt).Take(50).ToList();
+        UnreadCount = Db.Notifications.Count(n => !n.IsRead);
+    }
+
+    private void Toggle()
+    {
+        open = !open;
+    }
+
+    private string GetLast4(int? txId)
+    {
+        if (txId == null) return "----";
+        var tx = Db.Transactions.Find(txId.Value);
+        return tx?.CardLast4 ?? "----";
+    }
+
+    private string GetAgo(DateTime dt)
+    {
+        var span = DateTime.UtcNow - dt;
+        if (span.TotalMinutes < 1) return "Ahora";
+        if (span.TotalMinutes < 60) return $"Hace {(int)span.TotalMinutes} min";
+        if (span.TotalHours < 24) return $"Hace {(int)span.TotalHours} h";
+        return $"Hace {(int)span.TotalDays} d";
+    }
+
+    private async Task MarkAllRead()
+    {
+        var list = Db.Notifications.Where(n => !n.IsRead).ToList();
+        foreach(var n in list) n.IsRead = true;
+        Db.SaveChanges();
+        await LoadNotificationsAsync();
+    }
+
+    private void Analyze(int? txId)
+    {
+        if (txId != null)
+        {
+            // Navigate to transaction analysis or open modal; for now navigate to Dashboard and scroll to id
+            NavigationManager.NavigateTo($"/#tx{txId}");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection != null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

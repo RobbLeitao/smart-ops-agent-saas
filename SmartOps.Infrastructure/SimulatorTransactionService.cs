@@ -90,7 +90,33 @@ public class SimulatorTransactionService : BackgroundService, ITransactionPublis
 
                 try
                 {
+                    // If transaction failed, persist a Notification
+                    if (string.Equals(tx.Status, "Failed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            var notif = new SmartOps.Core.Entities.Notification
+                            {
+                                TransactionId = tx.Id,
+                                Title = $"Transacción {tx.Id} falló",
+                                Message = tx.ErrorMessage ?? "",
+                                Type = "Error",
+                                IsRead = false,
+                                CreatedAt = DateTime.UtcNow
+                            };
+                            db.Notifications.Add(notif);
+                            db.SaveChanges();
+                            _logger.LogInformation("Persisted notification for transaction {Id}", tx.Id);
+                        }
+                        catch (Exception ex)
+                        {
+                            try { _logger.LogError(ex, "Failed to persist notification for transaction {Id}", tx.Id); } catch { }
+                        }
+                    }
+
+                    _logger.LogInformation("[DI-PROBE] Simulator about to invoke OnTransactionCreated for {Id}", tx.Id);
                     OnTransactionCreated?.Invoke(this, new TransactionEventArgs(tx));
+                    _logger.LogInformation("[DI-PROBE] Simulator invoked OnTransactionCreated for {Id}", tx.Id);
                 }
                 catch (Exception ex)
                 {

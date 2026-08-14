@@ -16,6 +16,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<OperationLog> OperationLogs => Set<OperationLog>();
     public DbSet<SmartOps.Core.Entities.Diagnostic> Diagnostics => Set<SmartOps.Core.Entities.Diagnostic>();
     public DbSet<SmartOps.Core.Entities.DiagnosticFeedback> DiagnosticFeedback => Set<SmartOps.Core.Entities.DiagnosticFeedback>();
+    public DbSet<SmartOps.Core.Entities.Notification> Notifications => Set<SmartOps.Core.Entities.Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
