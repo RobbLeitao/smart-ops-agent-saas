@@ -8,7 +8,7 @@
 @implements IAsyncDisposable
 
 <div class="dropdown">
-    <button class="btn btn-sm position-relative" @onclick="Toggle">
+    <button type="button" class="btn btn-sm position-relative" style="z-index:2100;position:relative;" @onclick:stopPropagation @onclick:preventDefault @onclick="Toggle" onclick="console.log('NotificationBell clicked (native)')">
         <i class="bi bi-bell" style="font-size:18px;color:#cbd5e1"></i>
         @if (UnreadCount > 0)
         {
@@ -117,6 +117,7 @@
 
     private async Task Toggle()
     {
+                Logger.LogInformation("NotificationBell.Toggle invoked. Current open={Open}", open);
                 open = !open;
                 if (open)
                 {
