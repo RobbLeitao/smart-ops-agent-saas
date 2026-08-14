@@ -3,6 +3,7 @@
 @inject AppDbContext Db
 @inject NavigationManager NavigationManager
 @inject Microsoft.Extensions.Logging.ILogger<NotificationBell> Logger
+@using Microsoft.AspNetCore.SignalR.Client
 @implements IAsyncDisposable
 
 <div class="dropdown">
@@ -77,6 +78,19 @@
                     StateHasChanged();
                 });
             }
+        });
+
+        // Listen for lightweight notification events to update bell immediately
+        hubConnection.On<object>("NotificationCreated", async (payload) =>
+        {
+            await InvokeAsync(() =>
+            {
+                // Increment unread badge and refresh list head without full reload
+                UnreadCount++;
+                // Optionally refresh list head for details
+                _ = LoadNotificationsAsync();
+                StateHasChanged();
+            });
         });
 
         try { await hubConnection.StartAsync(); } catch(Exception ex) { Logger.LogWarning(ex, "Failed to start hub in NotificationBell"); }
