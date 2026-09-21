@@ -2,6 +2,7 @@
 @using SmartOps.Core.Entities
 @inject AppDbContext Db
 @inject NavigationManager NavigationManager
+@inject SmartOps.Web.Services.TransactionDrawerService DrawerService
 @inject Microsoft.Extensions.Logging.ILogger<NotificationBell> Logger
 @using Microsoft.AspNetCore.SignalR.Client
 @using Microsoft.EntityFrameworkCore
@@ -195,8 +196,11 @@
 
                 if (txId != null)
                 {
-                    // Navigate to transaction analysis or open modal; for now navigate to Dashboard and scroll to id
-                    NavigationManager.NavigateTo($"/#tx{txId}");
+                    var tx = await Db.Transactions.FindAsync(txId.Value);
+                    if (tx != null)
+                    {
+                        DrawerService.Open(new TransactionDto { Id = tx.Id, CardLast4 = tx.CardLast4, Timestamp = tx.OccurredAt ?? DateTime.UtcNow, Amount = tx.Amount, Status = tx.Status, Channel = tx.Channel, ErrorCode = tx.ErrorCode });
+                    }
                 }
     }
 
