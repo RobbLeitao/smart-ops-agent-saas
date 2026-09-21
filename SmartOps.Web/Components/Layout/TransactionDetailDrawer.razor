@@ -1,17 +1,21 @@
 @using SmartOps.Web.Services
+@using System.Text.RegularExpressions
 @inject TransactionDrawerService DrawerService
 @inject Microsoft.Extensions.Logging.ILogger<TransactionDetailDrawer> Logger
 @implements IDisposable
 
-<div class="drawer-backdrop @(IsOpen ? "open" : "")" @onclick="Close" style="display:@(IsOpen ? "block" : "none")"></div>
-<aside class="drawer @(IsOpen ? "open" : "")" tabindex="0" @ref="drawerRef" @onkeydown="HandleKeyDown" style="display:@(IsOpen ? "flex" : "none")" role="dialog" aria-hidden="@(IsOpen?"false":"true")">
+<div class="drawer-backdrop @(IsOpen ? "open" : "")" @onclick="Close"></div>
+<aside class="drawer @(IsOpen ? "open" : "")" tabindex="0" @ref="drawerRef" @onkeydown="HandleKeyDown" role="dialog" aria-hidden="@(IsOpen?"false":"true")">
   <div class="drawer-header">
     <div class="header-left">
       <div class="tx-id">TX #@(_dto?.Id)</div>
       <div class="status-badge @(IsError ? "error" : "success")">@(_dto?.Status ?? "—")</div>
     </div>
     <div class="header-actions">
-      <button class="btn analyze" @onclick="Analyze">Analizar con IA</button>
+      @if (IsError)
+      {
+        <button class="btn analyze" @onclick="Analyze">Analizar con IA</button>
+      }
       <button class="btn close" @onclick="Close">✕</button>
     </div>
   </div>
@@ -21,48 +25,29 @@
     <div class="row"><div class="muted">Timestamp</div><div>@(_dto?.Timestamp.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"))</div></div>
     <div class="row"><div class="muted">Monto</div><div>@(_dto?.Amount.ToString("C"))</div></div>
     <div class="row"><div class="muted">Canal</div><div>@(_dto?.Channel ?? "—")</div></div>
-    <div class="row"><div class="muted">Código error</div><div>@(_dto?.ErrorCode ?? "—")</div></div>
 
-    <h4>Diagnóstico IA</h4>
-    <div class="markdown">@(_diagnostic ?? "No hay diagnóstico aún.")</div>
+    @if (IsError)
+    {
+      <div class="row"><div class="muted">Código error</div><div>@(_dto?.ErrorCode ?? "—")</div></div>
 
-    <h4 style="margin-top:14px">Telemetría</h4>
-    <pre class="telemetry">@(_telemetry ?? "{}")</pre>
-
-    <div class="drawer-actions">
-      <button class="primary" @onclick="Retry">Reintentar</button>
-      <button class="btn" @onclick="Notify">Notificar</button>
-    </div>
+      <h4>Diagnóstico IA</h4>
+      <div class="diagnostic-box">
+        @if (!string.IsNullOrWhiteSpace(_diagnostic))
+        {
+          @((MarkupString)RenderMarkdown(_diagnostic))
+        }
+        else
+        {
+          <p class="muted">No hay diagnóstico aún.</p>
+        }
+      </div>
+    }
   </div>
 </aside>
-
-<style>
-  :root{--drawer-bg:#1e2330;--muted:#9aa6b2;--accent:#06b6d4;--success:#16a34a;--danger:#ef4444}
-  .drawer-backdrop{position:fixed;inset:0;background:rgba(2,6,23,0.6);opacity:0;pointer-events:none;transition:opacity .25s ease;z-index:9998}
-  .drawer-backdrop.open{opacity:1;pointer-events:auto}
-  .drawer{position:fixed;right:0;top:0;height:100vh;width:420px;background:var(--drawer-bg);box-shadow:-20px 0 50px rgba(2,6,23,0.7);transform:translateX(110%);transition:transform .33s cubic-bezier(.2,.9,.2,1);display:flex;flex-direction:column;z-index:9999;color:#e6eef6}
-  .drawer.open{transform:translateX(0)}
-  .drawer-header{padding:16px;border-bottom:1px solid rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:space-between}
-  .header-left{display:flex;gap:12px;align-items:center}
-  .tx-id{font-weight:700}
-  .status-badge{padding:6px 10px;border-radius:999px;font-size:12px}
-  .status-badge.success{background:rgba(22,163,74,0.12);color:var(--success)}
-  .status-badge.error{background:rgba(239,68,68,0.12);color:var(--danger)}
-  .drawer-body{padding:16px;overflow:auto;flex:1}
-  .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed rgba(255,255,255,0.02)}
-  .muted{color:var(--muted);font-size:13px}
-  .drawer-actions{padding:16px;border-top:1px solid rgba(255,255,255,0.02);display:flex;gap:8px}
-  .primary{background:var(--accent);color:#072129;border:none;padding:10px 12px;border-radius:8px;cursor:pointer}
-  .btn{background:transparent;border:1px solid rgba(255,255,255,0.06);color:#cfe8ff;padding:8px 10px;border-radius:8px;cursor:pointer}
-  .analyze{margin-right:8px}
-  .telemetry{background:#0b1220;border-radius:6px;padding:8px;color:#9fb8c6;font-size:13px}
-  @@media (max-width:600px){.drawer{width:100%}}
-</style>
 
 @code {
     private TransactionDto? _dto;
     private string? _diagnostic;
-    private string? _telemetry;
     private bool IsOpen => _dto != null;
     private bool IsError => _dto?.Status?.ToLowerInvariant().Contains("fail") ?? false;
     private ElementReference drawerRef;
@@ -70,12 +55,20 @@
     protected override void OnInitialized()
     {
         Logger?.LogInformation("TransactionDetailDrawer OnInitialized (prerender or interactive)");
-        // Avoid subscribing during prerender. Subscribe on first interactive render instead.
     }
 
-    // Registration is performed explicitly by MainLayout to avoid prerender/interactive instance races.
+    // Blazor only calls OnAfterRenderAsync on an interactive instance — it never runs
+    // during static SSR/prerender. Registering here (like NotificationBell does for its
+    // SignalR hub) guarantees we subscribe on the long-lived interactive instance and not
+    // on a prerender instance that gets disposed immediately after.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            Logger?.LogInformation("OnAfterRenderAsync(firstRender): registering with DrawerService");
+            DrawerService.Register(OnDrawerChange);
+        }
+
         if (IsOpen)
         {
             try { await drawerRef.FocusAsync(); } catch (Exception ex) { Logger?.LogDebug(ex, "FocusAsync failed"); }
@@ -89,23 +82,8 @@
         if (_dto == null)
         {
             _diagnostic = null;
-            _telemetry = null;
         }
         InvokeAsync(StateHasChanged);
-    }
-
-    // Public API so layout can start/stop listening on the interactive instance.
-    public void StartListening()
-    {
-        Logger?.LogInformation("StartListening called. Drawer.CurrentId={Id}", DrawerService.Current?.Id.ToString() ?? "null");
-        DrawerService.Register(OnDrawerChange);
-        Logger?.LogInformation("StartListening completed. SubscribersAfter={Count}", /* use Snapshot via reflection? rely on logs in service */ 0);
-    }
-
-    public void StopListening()
-    {
-        Logger?.LogInformation("StopListening called");
-        DrawerService.Unregister(OnDrawerChange);
     }
 
     private void Close()
@@ -130,16 +108,39 @@
         return Task.CompletedTask;
     }
 
-    private Task Retry()
+    // Minimal, safe Markdown->HTML conversion: HTML-encodes the input first (so raw
+    // user/API content can never inject markup), then converts a small supported subset
+    // (bold **text**, "## " headings, "- " list items) into real HTML tags.
+    private static string RenderMarkdown(string md)
     {
-        // minimal placeholder: could call retry endpoint
-        return Task.CompletedTask;
-    }
+        if (string.IsNullOrWhiteSpace(md)) return string.Empty;
+        var encoded = System.Net.WebUtility.HtmlEncode(md);
+        encoded = Regex.Replace(encoded, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
 
-    private Task Notify()
-    {
-        // placeholder for notification action
-        return Task.CompletedTask;
+        var lines = encoded.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        var sb = new System.Text.StringBuilder();
+        bool inList = false;
+
+        foreach (var raw in lines)
+        {
+            var line = raw.Trim();
+            if (line.StartsWith("## "))
+            {
+                if (inList) { sb.AppendLine("</ul>"); inList = false; }
+                sb.AppendLine($"<h5>{line.Substring(3).Trim()}</h5>");
+                continue;
+            }
+            if (line.StartsWith("- "))
+            {
+                if (!inList) { sb.AppendLine("<ul>"); inList = true; }
+                sb.AppendLine($"<li>{line.Substring(2).Trim()}</li>");
+                continue;
+            }
+            if (inList) { sb.AppendLine("</ul>"); inList = false; }
+            sb.AppendLine($"<p>{line}</p>");
+        }
+        if (inList) sb.AppendLine("</ul>");
+        return sb.ToString();
     }
 
     public void Dispose()
