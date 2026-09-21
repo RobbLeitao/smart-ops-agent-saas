@@ -1,5 +1,6 @@
 @using SmartOps.Web.Services
 @inject TransactionDrawerService DrawerService
+@inject Microsoft.Extensions.Logging.ILogger<TransactionDetailDrawer> Logger
 @implements IDisposable
 
 <div class="drawer-backdrop @(IsOpen ? "open" : "")" @onclick="Close" style="display:@(IsOpen ? "block" : "none")"></div>
@@ -68,6 +69,7 @@
 
     protected override void OnInitialized()
     {
+        Logger?.LogInformation("TransactionDetailDrawer OnInitialized (prerender or interactive)");
         // Avoid subscribing during prerender. Subscribe on first interactive render instead.
     }
 
@@ -75,17 +77,20 @@
     {
         if (firstRender)
         {
+            Logger?.LogInformation("TransactionDetailDrawer OnAfterRenderAsync(firstRender). Registering callback. Drawer.CurrentId={Id}", DrawerService.Current?.Id.ToString() ?? "null");
             DrawerService.Register(OnDrawerChange);
+            Logger?.LogInformation("TransactionDetailDrawer registered callback");
         }
 
         if (IsOpen)
         {
-            try { await drawerRef.FocusAsync(); } catch { }
+            try { await drawerRef.FocusAsync(); } catch (Exception ex) { Logger?.LogDebug(ex, "FocusAsync failed"); }
         }
     }
 
     private void OnDrawerChange(TransactionDto? dto)
     {
+        Logger?.LogInformation("TransactionDetailDrawer.OnDrawerChange invoked. NewId={Id}", dto?.Id.ToString() ?? "null");
         _dto = dto;
         if (_dto == null)
         {
@@ -131,6 +136,7 @@
 
     public void Dispose()
     {
+        Logger?.LogInformation("TransactionDetailDrawer disposing and unregistering callback");
         DrawerService.Unregister(OnDrawerChange);
     }
 }
