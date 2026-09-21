@@ -68,8 +68,7 @@
 
     protected override void OnInitialized()
     {
-        DrawerService.OnChange += OnDrawerChange;
-        _dto = DrawerService.Current;
+        DrawerService.Register(OnDrawerChange);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -80,9 +79,9 @@
         }
     }
 
-    private void OnDrawerChange()
+    private void OnDrawerChange(TransactionDto? dto)
     {
-        _dto = DrawerService.Current;
+        _dto = dto;
         if (_dto == null)
         {
             _diagnostic = null;
@@ -127,6 +126,6 @@
 
     public void Dispose()
     {
-        DrawerService.OnChange -= OnDrawerChange;
+        DrawerService.Unregister(OnDrawerChange);
     }
 }

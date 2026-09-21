@@ -17,20 +17,40 @@ namespace SmartOps.Web.Services
     public class TransactionDrawerService
     {
         private TransactionDto? _current;
-        public event Action? OnChange;
+        private readonly List<Action<TransactionDto?>> _subscribers = new();
 
         public TransactionDto? Current => _current;
+
+        // Register a callback. The callback is invoked immediately with current value.
+        public void Register(Action<TransactionDto?> callback)
+        {
+            if (callback == null) return;
+            _subscribers.Add(callback);
+            callback(_current);
+        }
+
+        public void Unregister(Action<TransactionDto?> callback)
+        {
+            if (callback == null) return;
+            _subscribers.Remove(callback);
+        }
 
         public void Open(TransactionDto dto)
         {
             _current = dto;
-            OnChange?.Invoke();
+            foreach (var s in _subscribers.ToList())
+            {
+                try { s.Invoke(_current); } catch { }
+            }
         }
 
         public void Close()
         {
             _current = null;
-            OnChange?.Invoke();
+            foreach (var s in _subscribers.ToList())
+            {
+                try { s.Invoke(_current); } catch { }
+            }
         }
     }
 }
