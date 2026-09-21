@@ -1,6 +1,11 @@
 @using SmartOps.Web.Services
 @using System.Text.RegularExpressions
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
 @inject TransactionDrawerService DrawerService
+@inject SmartOps.Infrastructure.Data.AppDbContext Db
+@inject SmartOps.Web.Services.DiagnosticOrchestratorService Orchestrator
+@inject AuthenticationStateProvider AuthStateProvider
 @inject Microsoft.Extensions.Logging.ILogger<TransactionDetailDrawer> Logger
 @implements IDisposable
 
@@ -12,7 +17,7 @@
       <div class="status-badge @(IsError ? "error" : "success")">@(_dto?.Status ?? "—")</div>
     </div>
     <div class="header-actions">
-      @if (IsError)
+      @if (IsError && string.IsNullOrWhiteSpace(_diagnostic) && !_isAnalyzing)
       {
         <button class="btn analyze" @onclick="Analyze">Analizar con IA</button>
       }
@@ -48,6 +53,7 @@
 @code {
     private TransactionDto? _dto;
     private string? _diagnostic;
+    private bool _isAnalyzing;
     private bool IsOpen => _dto != null;
     private bool IsError => _dto?.Status?.ToLowerInvariant().Contains("fail") ?? false;
     private ElementReference drawerRef;
@@ -79,11 +85,38 @@
     {
         Logger?.LogInformation("TransactionDetailDrawer.OnDrawerChange invoked. NewId={Id}", dto?.Id.ToString() ?? "null");
         _dto = dto;
-        if (_dto == null)
-        {
-            _diagnostic = null;
-        }
+        _diagnostic = null;
+        _isAnalyzing = false;
         InvokeAsync(StateHasChanged);
+
+        if (dto != null && dto.Status?.ToLowerInvariant().Contains("fail") == true)
+        {
+            _ = LoadExistingDiagnosticAsync(dto.Id);
+        }
+    }
+
+    // Loads the most recent persisted diagnostic for this transaction (if any) so
+    // reopening the drawer shows the previous result instead of asking to analyze again.
+    private async Task LoadExistingDiagnosticAsync(int transactionId)
+    {
+        try
+        {
+            var existing = await Db.Diagnostics
+                .Where(d => d.TransactionId == transactionId)
+                .OrderByDescending(d => d.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            // Ignore the result if the drawer moved on to a different transaction while we awaited.
+            if (existing != null && _dto?.Id == transactionId)
+            {
+                _diagnostic = existing.Markdown;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Failed to load existing diagnostic for transaction {Id}", transactionId);
+        }
     }
 
     private void Close()
@@ -96,16 +129,48 @@
         if (e.Key == "Escape") Close();
     }
 
-    private Task Analyze()
+    private async Task Analyze()
     {
+        if (_dto == null) return;
+
+        var transactionId = _dto.Id;
+        _isAnalyzing = true;
         _diagnostic = "Generando diagnóstico...";
-        // placeholder: call existing AI analyzer service or API
-        _ = Task.Run(async () => {
-            await Task.Delay(800);
-            _diagnostic = "**Resumen:** El pago fue rechazado por 3DS. Recomendación: verificar proveedor y reintentar con flag 3DS=false.";
+        StateHasChanged();
+
+        try
+        {
+            var tx = await Db.Transactions.FindAsync(transactionId);
+            if (tx == null)
+            {
+                _diagnostic = "No se encontró la transacción.";
+                return;
+            }
+
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userId = user?.Identity != null && user.Identity.IsAuthenticated
+                ? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                : null;
+
+            // Runs the AI diagnostic and persists it as a Diagnostic row linked to the
+            // transaction (see DiagnosticOrchestratorService.PersistDiagnosticAsync).
+            var markdown = await Orchestrator.RunDiagnosticAsync(tx, userId);
+            if (_dto?.Id == transactionId)
+            {
+                _diagnostic = markdown;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Analyze failed for transaction {Id}", transactionId);
+            _diagnostic = "⚠️ No logramos procesar el diagnóstico inteligente en este momento. Por favor, reintentá en unos instantes.";
+        }
+        finally
+        {
+            _isAnalyzing = false;
             await InvokeAsync(StateHasChanged);
-        });
-        return Task.CompletedTask;
+        }
     }
 
     // Minimal, safe Markdown->HTML conversion: HTML-encodes the input first (so raw
