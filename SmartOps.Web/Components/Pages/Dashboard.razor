@@ -128,7 +128,7 @@
                                         <span class="badge rounded-pill dashboard-status-pill">@t.Status</span>
                                     </td>
                                     <td class="text-end pe-3">
-                                        <button class="btn btn-ia" @onclick="() => DrawerService.Open(new SmartOps.Web.Services.TransactionDto { Id = t.Id, CardLast4 = t.CardLast4, Timestamp = t.OccurredAt ?? DateTime.UtcNow, Amount = t.Amount, Status = t.Status, Channel = t.Channel, ErrorCode = t.ErrorCode })">Detalle</button>
+                                        <button class="btn btn-ia" @onclick="() => DrawerService.Open(new SmartOps.Web.Services.TransactionDto { Id = t.Id, CardLast4 = t.CardLast4, Timestamp = t.OccurredAt ?? DateTime.UtcNow, Amount = t.Amount, Status = t.Status, Channel = t.Provider, ErrorCode = t.ErrorMessage })">Detalle</button>
                                     </td>
                                 </tr>
                             }

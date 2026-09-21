@@ -6,6 +6,7 @@
 @inject Microsoft.Extensions.Logging.ILogger<NotificationBell> Logger
 @using Microsoft.AspNetCore.SignalR.Client
 @using Microsoft.EntityFrameworkCore
+@using SmartOps.Web.Services
 @implements IAsyncDisposable
 
 <div class="dropdown">
@@ -199,7 +200,7 @@
                     var tx = await Db.Transactions.FindAsync(txId.Value);
                     if (tx != null)
                     {
-                        DrawerService.Open(new TransactionDto { Id = tx.Id, CardLast4 = tx.CardLast4, Timestamp = tx.OccurredAt ?? DateTime.UtcNow, Amount = tx.Amount, Status = tx.Status, Channel = tx.Channel, ErrorCode = tx.ErrorCode });
+                        DrawerService.Open(new TransactionDto { Id = tx.Id, CardLast4 = tx.CardLast4, Timestamp = tx.OccurredAt ?? DateTime.UtcNow, Amount = tx.Amount, Status = tx.Status, Channel = tx.Provider, ErrorCode = tx.ErrorMessage });
                     }
                 }
     }
