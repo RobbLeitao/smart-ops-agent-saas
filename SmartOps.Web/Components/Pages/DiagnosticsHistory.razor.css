@@ -1,0 +1,84 @@
+/* Diagnostic drawer (slides in from the right, mirrors TransactionDetailDrawer) */
+.diag-drawer-backdrop { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.6); opacity: 0; pointer-events: none; transition: opacity .3s ease; z-index: 9998; }
+.diag-drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+
+.diag-drawer {
+    position: fixed;
+    right: 0;
+    top: 0;
+    height: 100vh;
+    width: 500px;
+    max-width: 100vw;
+    background: #1e2330;
+    color: #e6eef8;
+    box-shadow: -20px 0 50px rgba(2, 6, 23, 0.7);
+    transform: translateX(100%);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform .32s cubic-bezier(.16,.84,.32,1), opacity .28s ease;
+    display: flex;
+    flex-direction: column;
+    z-index: 9999;
+    will-change: transform, opacity;
+}
+.diag-drawer.open { transform: translateX(0); opacity: 1; pointer-events: auto; }
+
+.diag-drawer-header {
+    position: sticky;
+    top: 0;
+    background: #1e2330;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    z-index: 1;
+}
+.diag-drawer-title { color: #e6eef8; font-size: 1.05rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diag-drawer-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.diag-drawer-close { background: transparent; border: 1px solid rgba(255,255,255,0.12); color: #cbd5e1; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+.diag-drawer-close:hover { background: rgba(255,255,255,0.06); }
+
+.diag-drawer-body { padding: 20px; flex: 1; overflow-y: auto; }
+
+.diagnostic-content { color: #e2e8f0; }
+.diagnostic-content h4, .diagnostic-content h5 { color: #f1f5f9; }
+.diagnostic-content p, .diagnostic-content li { color: #cbd5e1; }
+
+/* Export / view action buttons (used both in the table rows and the drawer header) */
+.export-btn { background: transparent; color: #cbd5e1; border: 1px solid rgba(148,163,184,0.18); border-radius: 8px; padding: 6px 10px; font-weight: 600; }
+.export-btn:hover { color: #f1f5f9; border-color: rgba(148,163,184,0.32); background: rgba(255,255,255,0.04); }
+
+.btn-ia {
+    background: transparent;
+    color: #cbd5e1;
+    border: 1px solid rgba(148,163,184,0.18);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.btn-ia .bi { color: #cbd5e1; }
+.btn-ia:hover { color: #f1f5f9; border-color: rgba(148,163,184,0.32); background: rgba(255,255,255,0.04); }
+
+/* Inside dark panels (suggested message card), the copy button is the primary violet action */
+.dark-panel .btn-ia { background: #635bff !important; color: #ffffff !important; border: none !important; padding: 6px 12px !important; border-radius: 8px !important; }
+.dark-panel .btn-ia .bi { color: #ffffff !important; }
+.dark-panel .btn-ia:hover { background: #4a43d1 !important; }
+
+.copy-btn { width: 140px; min-width: 140px; justify-content: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.copy-btn .bi { margin-right: 8px; }
+
+.dark-panel { background: #171c26; color: #e6eef8; }
+.dark-panel p, .dark-panel small, .dark-panel h4, .dark-panel h5, .dark-panel li { color: #e6eef8; }
+
+.feedback-btn { background: transparent; color: #cbd5e1; border: 1px solid rgba(148,163,184,0.18); padding: 6px 10px; border-radius: 8px; font-weight: 600; }
+.feedback-btn.active { background: rgba(99,102,241,0.15); color: #f1f5f9; border-color: rgba(99,102,241,0.32); }
+.feedback-thanks { opacity: 1; transition: opacity 400ms ease-in-out; }
+
+@media (max-width: 600px) {
+    .diag-drawer { width: 100%; }
+}

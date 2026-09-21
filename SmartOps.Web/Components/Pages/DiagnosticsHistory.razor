@@ -9,53 +9,6 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject Microsoft.AspNetCore.Identity.UserManager<SmartOps.Infrastructure.Data.ApplicationUser> UserManager
 
-<style>
-    /* Modal and feedback UI tweaks */
-    .feedback-btn { background: transparent; color: #cbd5e1; border: 1px solid rgba(148,163,184,0.08); padding:6px 10px; border-radius:8px; font-weight:600; }
-    .feedback-btn.active { background: rgba(99,102,241,0.12); color: #f1f5f9; border-color: rgba(99,102,241,0.22); }
-    .feedback-thanks { opacity: 1; transition: opacity 400ms ease-in-out; }
-
-    /* Export buttons in modal header */
-    .export-btn { background: transparent; color: #0f1724; border: 1px solid rgba(15,23,36,0.06); border-radius:8px; padding:6px 10px; font-weight:600; }
-    .export-btn:hover { color: #0b1220; border-color: rgba(15,23,36,0.12); }
-    /* Make the eye (view) button match export buttons style */
-    .btn-ia {
-        background: transparent !important;
-        color: #0f1724 !important;
-        border: 1px solid rgba(148,163,184,0.12) !important;
-        border-radius: 8px !important;
-        padding: 6px 10px !important;
-        font-weight: 600;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: none !important;
-    }
-    .btn-ia .bi { color: #0f1724 !important; }
-    .btn-ia:hover { color: #0b1220 !important; border-color: rgba(15,23,36,0.22) !important; background: rgba(255,255,255,0.02) !important; }
-
-    /* In dark panels, make action buttons (copy) visible with primary style */
-    .dark-panel .btn-ia {
-        background: #635bff !important; /* purple primary */
-        color: #ffffff !important;
-        border: none !important;
-        padding: 6px 12px !important;
-        border-radius: 8px !important;
-    }
-    .dark-panel .btn-ia .bi { color: #ffffff !important; }
-    .dark-panel .btn-ia:hover { background: #4a43d1 !important; }
-
-    /* Fixed width for copy button to avoid layout shift */
-    .copy-btn { width: 140px; min-width: 140px; justify-content: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } .copy-btn .bi { margin-right: 8px; }
-
-    .modal-header .modal-title { flex: 0 1 auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .modal-header .ms-auto { flex: 1 0 auto; justify-content: flex-end; }
-
-    /* Dark panel: ensure text inside dark background areas is white */
-    .dark-panel { color: #ffffff !important; }
-    .dark-panel p, .dark-panel small, .dark-panel h4, .dark-panel h5, .dark-panel li { color: #ffffff !important; }
-</style>
-
 <LoggingErrorBoundary>
 <div class="min-vh-100 py-5" style="background-color:transparent;">
     <div class="container-fluid">
@@ -151,55 +104,51 @@
     </div>
 </div>
 
-@* Modal *@
-@if (activeDiagnostic != null)
-{
-    <div class="modal-backdrop fade show" style="position:fixed;inset:0;background:rgba(0,0,0,0.96);backdrop-filter:blur(6px);z-index:1040;"></div>
-    <div class="modal d-block" tabindex="-1" style="position:fixed;inset:0;z-index:1050;">
-        <div class="modal-dialog modal-lg" style="max-width:880px;margin:0;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);"> 
-            <div class="modal-content bg-[#1e2330] text-black" style="border-radius:14px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 8px 40px rgba(0,0,0,0.8);">
-                <div class="modal-header border-0 d-flex align-items-center" style="background:transparent;">
-                    <h5 class="modal-title text-slate-100 mb-0">Diagnóstico: @activeDiagnostic.Id</h5>
-                    <div class="ms-auto d-flex align-items-center gap-2">
-                        <button class="btn btn-sm export-btn" data-bs-toggle="tooltip" title="Descargar JSON" @onclick="DownloadDiagnosticJsonAsync"><span class="bi bi-download me-1" aria-hidden="true"></span>JSON</button>
-                        <button class="btn btn-sm export-btn" data-bs-toggle="tooltip" title="Descargar PDF" @onclick="ExportDiagnosticPdfAsync"><span class="bi bi-printer me-1" aria-hidden="true"></span>PDF</button>
-                        <button type="button" class="btn btn-sm" style="background:#e6eef8;color:#0f1724;border-radius:8px;padding:6px 10px;font-weight:600;" @onclick="CloseDiagnostic">Cerrar</button>
-                    </div>
-                </div>
-                <div class="modal-body">
-                    <div class="diagnostic-content prose max-w-none text-slate-200" style="font-family:Segoe UI, Roboto, Arial, sans-serif;">
-                        @((MarkupString)RenderMarkdown(activeDiagnostic.Markdown))
-                    </div>
+@* Diagnostic drawer: always rendered, visibility/animation driven by the .open class *@
+<div class="diag-drawer-backdrop @(activeDiagnostic != null ? "open" : "")" @onclick="CloseDiagnostic"></div>
+<aside class="diag-drawer @(activeDiagnostic != null ? "open" : "")" tabindex="0" @onkeydown="HandleDrawerKeyDown" role="dialog" aria-hidden="@(activeDiagnostic != null ? "false" : "true")">
+    @if (activeDiagnostic != null)
+    {
+        <div class="diag-drawer-header">
+            <h5 class="diag-drawer-title mb-0">Diagnóstico: @activeDiagnostic.Id</h5>
+            <div class="diag-drawer-actions">
+                <button class="btn btn-sm export-btn" data-bs-toggle="tooltip" title="Descargar JSON" @onclick="DownloadDiagnosticJsonAsync"><span class="bi bi-download me-1" aria-hidden="true"></span>JSON</button>
+                <button class="btn btn-sm export-btn" data-bs-toggle="tooltip" title="Descargar PDF" @onclick="ExportDiagnosticPdfAsync"><span class="bi bi-printer me-1" aria-hidden="true"></span>PDF</button>
+                <button type="button" class="diag-drawer-close" @onclick="CloseDiagnostic">✕</button>
+            </div>
+        </div>
+        <div class="diag-drawer-body">
+            <div class="diagnostic-content" style="font-family:Segoe UI, Roboto, Arial, sans-serif;">
+                @((MarkupString)RenderMarkdown(activeDiagnostic.Markdown))
+            </div>
 
-                    <div class="mt-4 p-3 rounded-4 dark-panel" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
-                        <div class="text-cyan-300 small mb-2">Mensaje sugerido para el cliente</div>
-                        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
-                            <p class="mb-0 text-slate-200 flex-grow-1">@GetSuggestedMessage(activeDiagnostic.Markdown)</p>
-                            <div class="d-flex align-items-center gap-2">
-                                <button class="btn btn-sm btn-ia copy-btn" @onclick="CopySuggestedMessageAsync">
-                                    <span class="bi bi-clipboard me-1" aria-hidden="true"></span>
-                                    @(showCopied ? "¡Copiado!" : "Copiar Mensaje")
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mt-4 p-3 rounded-4 dark-panel" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
-                        <div class="text-cyan-300 small mb-3">¿El diagnóstico fue útil?</div>
-                        <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <button class="@FeedbackButtonClass(true)" disabled="@IsFeedbackSelected" @onclick="() => RateDiagnosticAsync(true)">👍 Sí</button>
-                            <button class="@FeedbackButtonClass(false)" disabled="@IsFeedbackSelected" @onclick="() => RateDiagnosticAsync(false)">👎 No</button>
-                            @if (showFeedbackThanks)
-                            {
-                                <span class="text-emerald-400 small ms-2 feedback-thanks">¡Gracias por tu feedback!</span>
-                            }
-                        </div>
+            <div class="mt-4 p-3 rounded-4 dark-panel" style="border:1px solid rgba(148,163,184,0.14);">
+                <div class="text-cyan-300 small mb-2">Mensaje sugerido para el cliente</div>
+                <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+                    <p class="mb-0 flex-grow-1">@GetSuggestedMessage(activeDiagnostic.Markdown)</p>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-ia copy-btn" @onclick="CopySuggestedMessageAsync">
+                            <span class="bi bi-clipboard me-1" aria-hidden="true"></span>
+                            @(showCopied ? "¡Copiado!" : "Copiar Mensaje")
+                        </button>
                     </div>
                 </div>
             </div>
+
+            <div class="mt-4 p-3 rounded-4 dark-panel" style="border:1px solid rgba(148,163,184,0.14);">
+                <div class="text-cyan-300 small mb-3">¿El diagnóstico fue útil?</div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <button class="@FeedbackButtonClass(true)" disabled="@IsFeedbackSelected" @onclick="() => RateDiagnosticAsync(true)">👍 Sí</button>
+                    <button class="@FeedbackButtonClass(false)" disabled="@IsFeedbackSelected" @onclick="() => RateDiagnosticAsync(false)">👎 No</button>
+                    @if (showFeedbackThanks)
+                    {
+                        <span class="text-emerald-400 small ms-2 feedback-thanks">¡Gracias por tu feedback!</span>
+                    }
+                </div>
+            </div>
         </div>
-    </div>
-}
+    }
+</aside>
 
 </LoggingErrorBoundary>
 
@@ -309,6 +258,11 @@
         activeFeedback = null;
         showCopied = false;
         showFeedbackSaved = false;
+    }
+
+    private void HandleDrawerKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") CloseDiagnostic();
     }
 
     private string GetSuggestedMessage(string markdown)
