@@ -1,0 +1,211 @@
+@using SmartOps.Infrastructure.Data
+@using SmartOps.Core.Entities
+@inject AppDbContext Db
+@inject NavigationManager NavigationManager
+@inject Microsoft.Extensions.Logging.ILogger<NotificationBell> Logger
+@using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.EntityFrameworkCore
+@implements IAsyncDisposable
+
+<div class="dropdown">
+    <!-- Bell button with elevated z-index to avoid overlays intercepting clicks -->
+    <button id="notification-bell-btn" type="button" class="btn btn-sm position-relative" style="z-index:99999;position:relative;" @onclick="Toggle">
+        <i class="bi bi-bell" style="font-size:18px;color:#cbd5e1"></i>
+        @if (UnreadCount > 0)
+        {
+            <span class="badge bg-danger position-absolute" style="top:-6px;right:-6px;pointer-events:none;">@UnreadCount</span>
+        }
+    </button>
+
+    @if (open)
+    {
+        <div class="card shadow" style="position:absolute;right:0;top:36px;width:320px;z-index:99998;" @onclick:stopPropagation>
+            <div class="card-body p-2">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <strong>Notificaciones</strong>
+                    <button class="btn btn-link btn-sm" @onclick:stopPropagation @onclick="MarkAllRead">Marcar todas como leídas</button>
+                </div>
+                <div style="max-height:320px;overflow:auto;">
+                    @foreach(var n in notifications)
+                    {
+                        <div class="d-flex align-items-start gap-2 p-2 mb-1" style="border-bottom:1px solid rgba(255,255,255,0.03);">
+                            <div style="width:36px;height:36px;border-radius:8px;background:#1f2937;display:flex;align-items:center;justify-content:center;">
+                                <i class="bi bi-exclamation-circle text-danger"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <div class="small">@n.Title</div>
+                                        <div class="small text-muted">Tarjeta •••• @GetLast4(n.TransactionId) — @n.Message</div>
+                                    </div>
+                                    <div class="text-muted small">@GetAgo(n.CreatedAt)</div>
+                                </div>
+                                <div class="mt-1 d-flex gap-2">
+                                    @if (!n.IsRead)
+                                    {
+                                        <span class="badge bg-primary">Nuevo</span>
+                                    }
+                                    <button class="btn btn-sm btn-outline-primary btn-xs" @onclick:stopPropagation @onclick="() => Analyze(n.TransactionId, n.Id)">Analizar con IA</button>
+                                    <button class="btn btn-sm btn-link" @onclick:stopPropagation @onclick="() => MarkAsRead(n.Id)">Marcar leída</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Notification> notifications = new();
+    private Dictionary<int, string> cardLast4Cache = new();
+    private int UnreadCount = 0;
+    private bool open = false;
+    private HubConnection? hubConnection;
+    private readonly SemaphoreSlim _refreshLock = new(1,1);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Only load data here — hub setup must happen in OnAfterRenderAsync(firstRender)
+        // because OnInitializedAsync runs during SSR pre-render where there is no
+        // RendererSynchronizationContext; calling InvokeAsync from a SignalR handler
+        // during pre-render throws InvalidCastException and corrupts the circuit.
+        await LoadNotificationsAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Safe to start SignalR here — OnAfterRenderAsync only runs in interactive mode,
+        // never during SSR pre-render.
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/hubs/transactions"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        hubConnection.On<int>("ReceiveTransaction", async (_) =>
+        {
+            try { await InvokeAsync(SafeRefreshAsync); } catch { }
+        });
+
+        hubConnection.On<int>("NotificationCreated", async (_) =>
+        {
+            try { await InvokeAsync(SafeRefreshAsync); } catch { }
+        });
+
+        hubConnection.Reconnecting += _ => { Logger.LogWarning("NotificationBell SignalR reconnecting"); return Task.CompletedTask; };
+        hubConnection.Closed += _ => { Logger.LogWarning("NotificationBell SignalR closed"); return Task.CompletedTask; };
+
+        try { await hubConnection.StartAsync(); }
+        catch (Exception ex) { Logger.LogWarning(ex, "Failed to start hub in NotificationBell"); }
+    }
+
+    private async Task SafeRefreshAsync()
+    {
+                await _refreshLock.WaitAsync();
+                try
+                {
+                    await LoadNotificationsAsync();
+                    StateHasChanged();
+                }
+                finally
+                {
+                    _refreshLock.Release();
+                }
+    }
+
+    private async Task LoadNotificationsAsync()
+    {
+        notifications = await Db.Notifications.OrderByDescending(n => n.CreatedAt).Take(50).ToListAsync();
+        UnreadCount = await Db.Notifications.CountAsync(n => !n.IsRead);
+
+        // Preload card last4 for all notifications that have a TransactionId.
+        // Avoids synchronous Db.Transactions.Find(int) during render which throws
+        // InvalidCastException in SQLite (stores PKs as long, not int).
+        var txIds = notifications
+            .Where(n => n.TransactionId.HasValue)
+            .Select(n => n.TransactionId!.Value)
+            .Distinct()
+            .ToList();
+        if (txIds.Count > 0)
+        {
+            cardLast4Cache = await Db.Transactions
+                .Where(t => txIds.Contains(t.Id))
+                .ToDictionaryAsync(t => t.Id, t => t.CardLast4 ?? "----");
+        }
+        else
+        {
+            cardLast4Cache = new();
+        }
+    }
+
+    private async Task Toggle()
+    {
+        Logger.LogInformation("NotificationBell.Toggle invoked. open={Open}", open);
+        open = !open;
+        if (open)
+        {
+            await SafeRefreshAsync();
+        }
+    }
+
+
+    private string GetLast4(int? txId)
+    {
+        if (!txId.HasValue) return "----";
+        return cardLast4Cache.TryGetValue(txId.Value, out var v) ? v : "----";
+    }
+
+    private string GetAgo(DateTime dt)
+    {
+                var span = DateTime.UtcNow - dt;
+                if (span.TotalMinutes < 1) return "Ahora";
+                if (span.TotalMinutes < 60) return $"Hace {(int)span.TotalMinutes} min";
+                if (span.TotalHours < 24) return $"Hace {(int)span.TotalHours} h";
+                return $"Hace {(int)span.TotalDays} d";
+    }
+
+    private async Task MarkAllRead()
+    {
+                var list = await Db.Notifications.Where(n => !n.IsRead).ToListAsync();
+                foreach(var n in list) n.IsRead = true;
+                await Db.SaveChangesAsync();
+                await SafeRefreshAsync();
+    }
+
+    private async Task MarkAsRead(int id)
+    {
+                var n = await Db.Notifications.FindAsync(id);
+                if (n != null && !n.IsRead)
+                {
+                    n.IsRead = true;
+                    await Db.SaveChangesAsync();
+                    await SafeRefreshAsync();
+                }
+    }
+
+    private async Task Analyze(int? txId, int? notificationId = null)
+    {
+                if (notificationId.HasValue)
+                {
+                    await MarkAsRead(notificationId.Value);
+                }
+
+                if (txId != null)
+                {
+                    // Navigate to transaction analysis or open modal; for now navigate to Dashboard and scroll to id
+                    NavigationManager.NavigateTo($"/#tx{txId}");
+                }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+                if (hubConnection != null)
+                {
+                    await hubConnection.DisposeAsync();
+                }
+                _refreshLock.Dispose();
+    }
+}

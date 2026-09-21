@@ -167,6 +167,15 @@ builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticOrchestratorService>(
 
 // Register ITransactionAnalyzer abstraction and choose implementation based on configuration
 var openAiSection = builder.Configuration.GetSection("OpenAI");
+
+// Register TransactionNotifier which bridges publisher events to SignalR
+builder.Services.AddSingleton<SmartOps.Web.Services.TransactionNotifier>();
+// Ensure HubContext is available via SignalR server support; SignalR is included in ASP.NET Core
+builder.Services.AddSignalR();
+
+// Enable verbose SignalR logging to surface InvalidDataException stack traces in Output window
+builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR", LogLevel.Debug);
+builder.Logging.AddFilter("Microsoft.AspNetCore.Http.Connections", LogLevel.Debug);
 var openAiKey = openAiSection.GetValue<string>("ApiKey");
 if (!string.IsNullOrWhiteSpace(openAiKey))
 {
@@ -180,6 +189,32 @@ else
 }
 
 // Proceed with building the app further below...
+
+// Register transaction publisher provider based on configuration (Simulator | External)
+var txSection = builder.Configuration.GetSection("TransactionSettings");
+var txProvider = txSection.GetValue<string>("Provider") ?? "Simulator";
+var txInterval = txSection.GetValue<int?>("IntervalSeconds") ?? 8;
+
+// Bind settings for services that need them
+builder.Services.Configure<SmartOps.Infrastructure.TransactionSettings>(opt =>
+{
+    opt.Provider = txProvider;
+    opt.IntervalSeconds = txInterval;
+});
+
+if (txProvider.Equals("Simulator", StringComparison.OrdinalIgnoreCase))
+{
+    // Register simulator as singleton publisher and hosted service
+    builder.Services.AddSingleton<SmartOps.Infrastructure.SimulatorTransactionService>();
+    builder.Services.AddSingleton<SmartOps.Core.Interfaces.ITransactionPublisher>(sp => sp.GetRequiredService<SmartOps.Infrastructure.SimulatorTransactionService>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<SmartOps.Infrastructure.SimulatorTransactionService>());
+}
+else
+{
+    // Fallback: register a no-op publisher so DI resolutions succeed
+    builder.Services.AddSingleton<SmartOps.Infrastructure.NoopTransactionPublisher>();
+    builder.Services.AddSingleton<SmartOps.Core.Interfaces.ITransactionPublisher>(sp => sp.GetRequiredService<SmartOps.Infrastructure.NoopTransactionPublisher>());
+}
 
 // Add Identity and auth services
 builder.Services.AddIdentity<SmartOps.Infrastructure.Data.ApplicationUser, Microsoft.AspNetCore.Identity.IdentityRole>(options =>
@@ -254,6 +289,13 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 });
 
 var app = builder.Build();
+
+// Debug endpoint to capture client-side clicks and report to server logs
+app.MapPost("/api/debug/click", async (HttpContext http, ILogger<Program> logger) =>
+{
+    logger.LogInformation("/api/debug/click received from {RemoteIp}", http.Connection.RemoteIpAddress);
+    await http.Response.WriteAsync("ok");
+});
 
 // Ensure the database schema exists on startup
 using (var scope = app.Services.CreateScope())
@@ -349,6 +391,40 @@ using (var scope = app.Services.CreateScope())
 // (including integration tests) can safely delete the database file.
 app.Lifetime.ApplicationStopping.Register(SqliteConnection.ClearAllPools);
 
+// Force instantiate TransactionNotifier to ensure it subscribes to the publisher events.
+try
+{
+    var _notifier = app.Services.GetService<SmartOps.Web.Services.TransactionNotifier>();
+}
+catch { }
+
+// Temporary DI probe: subscribe a console handler to ITransactionPublisher to verify events are emitted.
+try
+{
+    var publisher = app.Services.GetService<SmartOps.Core.Interfaces.ITransactionPublisher>();
+    if (publisher != null)
+    {
+        publisher.OnTransactionCreated += (s, e) =>
+        {
+            try
+            {
+                Console.WriteLine($"[DI-PROBE] Event fired for transaction {e.Transaction.Id} status={e.Transaction.Status} gateway={e.Transaction.GatewayReference}");
+            }
+            catch { }
+        };
+        Console.WriteLine("[DI-PROBE] Subscribed temporary console handler to ITransactionPublisher.");
+    }
+    else
+    {
+        Console.WriteLine("[DI-PROBE] ITransactionPublisher not registered/resolvable.");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine("[DI-PROBE] Exception while subscribing probe: " + ex);
+}
+
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -365,6 +441,44 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+// Map SignalR hub for transactions
+app.MapHub<SmartOps.Web.Hubs.TransactionHub>("/hubs/transactions");
+
+// Temporary diagnostic endpoint to inspect DI and publisher subscribers
+app.MapGet("/debug/diag", (IServiceProvider sp) =>
+{
+    var pid = System.Diagnostics.Process.GetCurrentProcess().Id;
+    var notifier = sp.GetService<SmartOps.Web.Services.TransactionNotifier>();
+    var publisher = sp.GetService<SmartOps.Core.Interfaces.ITransactionPublisher>();
+    int subscriberCount = 0;
+    try
+    {
+        var ev = publisher?.GetType().GetEvent("OnTransactionCreated");
+        if (ev != null)
+        {
+            var fi = publisher.GetType().GetField("OnTransactionCreated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (fi != null)
+            {
+                var dlg = fi.GetValue(publisher) as MulticastDelegate;
+                if (dlg != null) subscriberCount = dlg.GetInvocationList().Length;
+            }
+            else
+            {
+                // Try property-style backing field
+                var prop = publisher.GetType().GetField("_onTransactionCreated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                if (prop != null)
+                {
+                    var dlg2 = prop.GetValue(publisher) as MulticastDelegate;
+                    if (dlg2 != null) subscriberCount = dlg2.GetInvocationList().Length;
+                }
+            }
+        }
+    }
+    catch { }
+
+    return Results.Json(new { pid, notifierPresent = notifier != null, publisherPresent = publisher != null, subscriberCount });
+});
 
 // Minimal account endpoints for login to set cookies outside the Blazor circuit
 app.MapPost("/account/login", async (HttpContext http, Microsoft.AspNetCore.Identity.UserManager<SmartOps.Infrastructure.Data.ApplicationUser> userManager, Microsoft.AspNetCore.Identity.SignInManager<SmartOps.Infrastructure.Data.ApplicationUser> signInManager) =>
