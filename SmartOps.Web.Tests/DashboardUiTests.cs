@@ -11,7 +11,7 @@ namespace SmartOps.Web.Tests
     public class DashboardUiTests
     {
         [Fact]
-        public async Task ClickingAnalyzeShowsSpinner()
+        public async Task ClickingDetailOpensTransactionDrawer()
         {
             using var ctx = new TestContext();
 
@@ -30,13 +30,15 @@ namespace SmartOps.Web.Tests
             });
             db.SaveChanges();
 
-            // Create a controllable TaskCompletionSource so the orchestrator task stays pending while we assert spinner
             var tcs = new System.Threading.Tasks.TaskCompletionSource<string>(System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
             var fake = new ControllableFakeAIOps(tcs);
+            var drawerService = new SmartOps.Web.Services.TransactionDrawerService(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<SmartOps.Web.Services.TransactionDrawerService>.Instance);
 
             ctx.Services.AddSingleton(db);
             ctx.Services.AddSingleton<SmartOps.Web.Services.IAIOpsService>(fake);
             ctx.Services.AddSingleton<SmartOps.Web.Services.DiagnosticOrchestratorService>();
+            ctx.Services.AddSingleton(drawerService);
             ctx.Services.AddSingleton<AuthenticationStateProvider>(new TestAuthenticationStateProvider());
 
             var comp = ctx.Render<SmartOps.Web.Components.Pages.Dashboard>();
@@ -44,19 +46,22 @@ namespace SmartOps.Web.Tests
             // Wait for initial render
             await Task.Delay(50);
 
-            var button = comp.Find("button");
+            // The dashboard no longer analyzes/spinners inline: clicking "Detalle" on a
+            // failed transaction row opens the TransactionDetailDrawer via TransactionDrawerService.
+            var button = comp.Find("button.btn-detail");
 
-            // Act: trigger analysis (the orchestrator will await the fake's Task which we control)
+            Assert.Null(drawerService.Current);
+
             button.Click();
 
-            // Basic assertion: button existed and click executed without throwing. Spinner visual is validated manually in browser.
-            Assert.NotNull(button);
-            Assert.Contains("•••• 4242", comp.Markup);
+            Assert.NotNull(drawerService.Current);
+            Assert.Equal(2, drawerService.Current!.Id);
+            Assert.Equal("4242", drawerService.Current!.CardLast4);
+            Assert.Equal("Failed", drawerService.Current!.Status);
 
-            // Now complete the operation to ensure the fake task completes cleanly
+            // Ensure the fake AI service task (used by other tests via the same fixture) can still complete cleanly.
             tcs.SetResult("## 🔍 Simulated result\n\n- ok");
-            await Task.Delay(200);
-            Assert.True(true);
+            await Task.Delay(50);
         }
 
         private sealed class TestAuthenticationStateProvider : AuthenticationStateProvider
