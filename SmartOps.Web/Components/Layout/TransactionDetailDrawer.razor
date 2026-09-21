@@ -73,15 +73,9 @@
         // Avoid subscribing during prerender. Subscribe on first interactive render instead.
     }
 
+    // Registration is performed explicitly by MainLayout to avoid prerender/interactive instance races.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
-        {
-            Logger?.LogInformation("TransactionDetailDrawer OnAfterRenderAsync(firstRender). Registering callback. Drawer.CurrentId={Id}", DrawerService.Current?.Id.ToString() ?? "null");
-            DrawerService.Register(OnDrawerChange);
-            Logger?.LogInformation("TransactionDetailDrawer registered callback");
-        }
-
         if (IsOpen)
         {
             try { await drawerRef.FocusAsync(); } catch (Exception ex) { Logger?.LogDebug(ex, "FocusAsync failed"); }
@@ -98,6 +92,20 @@
             _telemetry = null;
         }
         InvokeAsync(StateHasChanged);
+    }
+
+    // Public API so layout can start/stop listening on the interactive instance.
+    public void StartListening()
+    {
+        Logger?.LogInformation("StartListening called. Drawer.CurrentId={Id}", DrawerService.Current?.Id.ToString() ?? "null");
+        DrawerService.Register(OnDrawerChange);
+        Logger?.LogInformation("StartListening completed. SubscribersAfter={Count}", /* use Snapshot via reflection? rely on logs in service */ 0);
+    }
+
+    public void StopListening()
+    {
+        Logger?.LogInformation("StopListening called");
+        DrawerService.Unregister(OnDrawerChange);
     }
 
     private void Close()

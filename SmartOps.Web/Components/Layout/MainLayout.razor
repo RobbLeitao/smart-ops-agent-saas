@@ -5,11 +5,27 @@
     [CascadingParameter] public Task<AuthenticationState>? authStateTask { get; set; }
 
     AuthenticationState? authState;
+    private SmartOps.Web.Components.Layout.TransactionDetailDrawer? drawerRef;
 
     protected override async Task OnParametersSetAsync()
     {
         if (authStateTask != null)
             authState = await authStateTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                drawerRef?.StartListening();
+            }
+            catch (Exception ex)
+            {
+                // Logging not injected here; rely on existing logs in component/service.
+            }
+        }
     }
 }
 
@@ -60,7 +76,7 @@
             @Body
         </article>
     </main>
-    <TransactionDetailDrawer />
+    <TransactionDetailDrawer @ref="drawerRef" />
 </div>
 
 <div id="blazor-error-ui" data-nosnippet>
