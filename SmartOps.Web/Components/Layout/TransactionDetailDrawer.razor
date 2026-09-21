@@ -68,11 +68,16 @@
 
     protected override void OnInitialized()
     {
-        DrawerService.Register(OnDrawerChange);
+        // Avoid subscribing during prerender. Subscribe on first interactive render instead.
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            DrawerService.Register(OnDrawerChange);
+        }
+
         if (IsOpen)
         {
             try { await drawerRef.FocusAsync(); } catch { }
