@@ -6,44 +6,28 @@
 // appear on internal tab navigation (Dashboard <-> Historial <-> Integraciones), which uses
 // Blazor's enhanced navigation.
 //
-// The overlay is rendered HIDDEN by default on the server (class "page-transition-hidden" is
-// always present in MainLayout.razor's markup), so every normal page render/enhanced-navigation
-// re-render keeps it hidden with no extra logic required - there is nothing to "undo" between
-// navigations, which is what caused two previous bugs:
+// Visibility is decided entirely server-side, per real HTTP request (both hard reloads and
+// enhanced-navigation fetches are genuine requests to the server): MainLayout.razor renders the
+// overlay already visible in the very first HTML byte only when a short-lived "smartops_transition"
+// cookie (set by the /account/login endpoint on success, and cleared as soon as it's read) is
+// present. Every other navigation renders it hidden by default - there is nothing for this script
+// to "undo" between navigations, which is what caused two previous bugs:
 //   1) Listening to 'enhancednavigationstart'/'enhancednavigationend' re-showed the overlay on
 //      every tab click (it fires on ALL enhanced navigations, not just post-login).
-//   2) Removing those listeners without changing the overlay's default-visible markup left the
-//      overlay stuck fully visible forever after the very first tab click, because the server
-//      always re-rendered it as visible and nothing hid it again.
+//   2) A client-only sessionStorage flag combined with a default-hidden server render meant the
+//      overlay was never part of the FIRST paint of the post-login page - so the Dashboard was
+//      visible for a frame before the overlay (revealed by this script) covered it, then faded
+//      out again, producing a double flash.
 //
-// Instead, Login.razor explicitly flags "I just logged in" via sessionStorage right before its
-// forceLoad navigation. Only when that flag is present do we reveal the overlay here (once, on
-// the resulting hard page load) and then hide it again after a short delay.
-const TRANSITION_FLAG_KEY = 'smartops-show-transition-overlay';
-
-export function afterWebStarted(blazor) {
+// This script's only job now is: if the overlay was rendered visible (i.e. the server decided
+// this is the post-login load), schedule hiding it again after a short delay. If it was rendered
+// hidden (any other navigation), do nothing.
+export function afterWebStarted() {
     const overlay = document.getElementById('page-transition-overlay');
-    if (!overlay) {
+    if (!overlay || overlay.classList.contains('page-transition-hidden')) {
         return;
     }
 
-    let justLoggedIn = false;
-    try {
-        justLoggedIn = window.sessionStorage.getItem(TRANSITION_FLAG_KEY) === '1';
-        if (justLoggedIn) {
-            window.sessionStorage.removeItem(TRANSITION_FLAG_KEY);
-        }
-    } catch {
-        // sessionStorage can be unavailable (e.g. private browsing); simply skip the transition.
-        return;
-    }
-
-    if (!justLoggedIn) {
-        // Any other load (direct URL navigation, refresh, or tab switch) - overlay stays hidden.
-        return;
-    }
-
-    overlay.classList.remove('page-transition-hidden');
     window.setTimeout(() => {
         overlay.classList.add('page-transition-hidden');
     }, 500);
