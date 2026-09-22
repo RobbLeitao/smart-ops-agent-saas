@@ -123,6 +123,12 @@
                 // Dashboard, instead of an abrupt jump straight to the new page. The overlay
                 // stays fully opaque until navigation happens so the login form is never
                 // revealed again; the Dashboard itself fades in once it loads.
+                //
+                // Flag the upcoming hard page load as "coming from login" so the shared
+                // page-transition overlay (MainLayout) reveals itself exactly once on that
+                // load. It must NOT be tied to any generic navigation event, or it would also
+                // fire on plain tab switches (Dashboard/Historial/Integraciones).
+                await JS.InvokeVoidAsync("sessionStorage.setItem", "smartops-show-transition-overlay", "1");
                 isLoading = true;
                 StateHasChanged();
                 await Task.Delay(1900);
