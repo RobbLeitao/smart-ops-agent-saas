@@ -25,10 +25,6 @@
         animation: loginLoaderFadeIn 0.25s ease-out;
     }
 
-    .login-loader-overlay.login-loader-fade-out {
-        animation: loginLoaderFadeOut 0.25s ease-in forwards;
-    }
-
     .login-loader-content {
         text-align: center;
     }
@@ -59,11 +55,6 @@
         from { opacity: 0; }
         to { opacity: 1; }
     }
-
-    @@keyframes loginLoaderFadeOut {
-        from { opacity: 1; }
-        to { opacity: 0; }
-    }
 </style>
 
 <div class="login-panel">
@@ -88,7 +79,7 @@
 
 @if (isLoading)
 {
-    <div class="login-loader-overlay @(isFadingOut ? "login-loader-fade-out" : "")">
+    <div class="login-loader-overlay">
         <div class="login-loader-content">
             <img src="images/logo.png" alt="SmartOps" class="login-loader-logo" />
             <div class="login-loader-text">Iniciando sesión...</div>
@@ -101,7 +92,6 @@
     private string Password { get; set; } = string.Empty;
     private string? ErrorMessage;
     private bool isLoading;
-    private bool isFadingOut;
 
     private async Task HandleLogin()
     {
@@ -130,13 +120,12 @@
             if (status >= 200 && status <= 299)
             {
                 // Show a brief branded loader before the forced full-page navigation to the
-                // Dashboard, instead of an abrupt jump straight to the new page.
+                // Dashboard, instead of an abrupt jump straight to the new page. The overlay
+                // stays fully opaque until navigation happens so the login form is never
+                // revealed again; the Dashboard itself fades in once it loads.
                 isLoading = true;
                 StateHasChanged();
-                await Task.Delay(650);
-                isFadingOut = true;
-                StateHasChanged();
-                await Task.Delay(250);
+                await Task.Delay(900);
                 Navigation.NavigateTo("/", true);
             }
             else if (status == 401)
