@@ -1,39 +1,24 @@
 // Blazor JS initializer (auto-discovered by naming convention: {AssemblyName}.lib.module.js).
-// Drives the shared full-screen page-transition overlay (logo loader) declared in MainLayout.razor,
-// so every navigation between tabs (Dashboard, Historial, Integraciones) - as well as the very
-// first page load - shows the same branded transition instead of an abrupt content swap.
+// Drives the shared full-screen page-transition overlay (logo loader) declared in MainLayout.razor.
+//
+// IMPORTANT: this overlay must fire ONLY for the initial Login -> Dashboard transition (a hard,
+// full-page browser navigation triggered by Login.razor's forceLoad NavigateTo). It must NOT
+// re-trigger on internal tab navigation (Dashboard <-> Historial <-> Integraciones), which uses
+// Blazor's enhanced navigation and does not reload the page/script. A previous version of this
+// file also listened to 'enhancednavigationstart'/'enhancednavigationend' to show/hide the
+// overlay on every enhanced navigation, which caused it to flash on every tab change - that
+// logic has been intentionally removed.
 export function afterWebStarted(blazor) {
     const overlay = document.getElementById('page-transition-overlay');
     if (!overlay) {
         return;
     }
 
-    let hideTimeoutId = null;
-
-    function show() {
-        if (hideTimeoutId) {
-            window.clearTimeout(hideTimeoutId);
-            hideTimeoutId = null;
-        }
-        overlay.classList.remove('page-transition-hidden');
-    }
-
-    function scheduleHide(delayMs) {
-        if (hideTimeoutId) {
-            window.clearTimeout(hideTimeoutId);
-        }
-        hideTimeoutId = window.setTimeout(() => {
-            overlay.classList.add('page-transition-hidden');
-            hideTimeoutId = null;
-        }, delayMs);
-    }
-
-    // Initial page load (including full reloads, e.g. after Login): the overlay is visible by
-    // default in the server-rendered HTML, so just schedule its fade-out shortly after paint.
-    scheduleHide(500);
-
-    // Subsequent SPA-style navigations between tabs use Blazor's enhanced navigation, which does
-    // not trigger a full page reload; show/hide the overlay explicitly around each transition.
-    blazor.addEventListener('enhancednavigationstart', show);
-    blazor.addEventListener('enhancednavigationend', () => scheduleHide(250));
+    // The overlay is visible by default in the server-rendered HTML (covers the moment right
+    // after a hard page load/reload, e.g. right after Login navigates here). Fade it out shortly
+    // after first paint. This runs once per real page load - afterWebStarted is NOT re-invoked on
+    // enhanced (in-page) navigations, so switching tabs never shows this overlay again.
+    window.setTimeout(() => {
+        overlay.classList.add('page-transition-hidden');
+    }, 500);
 }
