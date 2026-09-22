@@ -651,3 +651,39 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+.page-transition-overlay {
+    position: fixed;
+    inset: 0;
+    /* Must sit above every other layer, including the notification bell (z-index:99999). */
+    z-index: 999999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        radial-gradient(circle at 50% 40%, rgba(34, 211, 238, 0.16), transparent 45%),
+        radial-gradient(circle at 60% 65%, rgba(139, 92, 246, 0.14), transparent 40%),
+        #0a0d14;
+    opacity: 1;
+    transition: opacity 0.35s ease-out, visibility 0s linear 0s;
+}
+
+.page-transition-overlay.page-transition-hidden {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    transition: opacity 0.35s ease-out, visibility 0s linear 0.35s;
+}
+
+.page-transition-logo {
+    width: 260px;
+    height: 260px;
+    object-fit: contain;
+    border-radius: 20px;
+    animation: pageTransitionPulse 1.4s ease-in-out infinite;
+    filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.55));
+}
+
+@keyframes pageTransitionPulse {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.55)); }
+    50% { transform: scale(1.08); filter: drop-shadow(0 0 28px rgba(139, 92, 246, 0.65)); }
+}
