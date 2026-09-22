@@ -185,8 +185,12 @@ if (!string.IsNullOrWhiteSpace(openAiKey))
 }
 else
 {
-    // Default to DevFake analyzer in development/no-key scenarios
-    builder.Services.AddSingleton<SmartOps.Web.Services.ITransactionAnalyzer, SmartOps.Web.Services.DevFakeTransactionAnalyzer>();
+    // Register the real Azure OpenAI / OpenAI adapter and the Local simulator, and switch between them at
+    // runtime based on the Provider persisted from /integrations (SmartOps.Web.Services.ProviderSwitchingTransactionAnalyzer).
+    builder.Services.AddSingleton<SmartOps.Web.Services.IChatCompletionServiceFactory, SmartOps.Web.Services.SemanticKernelChatCompletionServiceFactory>();
+    builder.Services.AddScoped<SmartOps.Web.Services.DevFakeTransactionAnalyzer>();
+    builder.Services.AddScoped<SmartOps.Web.Services.AzureOpenAiDiagnosticEngine>();
+    builder.Services.AddScoped<SmartOps.Web.Services.ITransactionAnalyzer, SmartOps.Web.Services.ProviderSwitchingTransactionAnalyzer>();
 }
 
 // Proceed with building the app further below...
