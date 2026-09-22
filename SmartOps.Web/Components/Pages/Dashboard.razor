@@ -289,6 +289,12 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (metricsDirty)
+        {
+            await AnimateMetricsAsync();
+            metricsDirty = false;
+        }
+
         if (firstRender && hubConnection == null)
         {
             try
@@ -358,12 +364,6 @@
             {
                 Logger.LogWarning(ex, "Failed to start SignalR connection for dashboard.");
             }
-        }
-
-        if (metricsDirty)
-        {
-            await AnimateMetricsAsync();
-            metricsDirty = false;
         }
 
         if (!showChartsModal || !chartsDirty || chartsRendering)
