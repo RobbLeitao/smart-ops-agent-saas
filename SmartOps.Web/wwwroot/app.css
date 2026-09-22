@@ -287,12 +287,6 @@ a, .btn-link {
         radial-gradient(circle at top left, rgba(34, 211, 238, 0.14), transparent 28%),
         radial-gradient(circle at top right, rgba(139, 92, 246, 0.12), transparent 24%),
         linear-gradient(180deg, #1a1f2c 0%, #11151d 100%);
-    animation: dashboardShellFadeIn 0.45s ease-out;
-}
-
-@keyframes dashboardShellFadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
 }
 
 .dashboard-panel {
