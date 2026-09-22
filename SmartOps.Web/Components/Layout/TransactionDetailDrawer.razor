@@ -1,0 +1,216 @@
+@using SmartOps.Web.Services
+@using System.Text.RegularExpressions
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
+@inject TransactionDrawerService DrawerService
+@inject SmartOps.Infrastructure.Data.AppDbContext Db
+@inject SmartOps.Web.Services.DiagnosticOrchestratorService Orchestrator
+@inject AuthenticationStateProvider AuthStateProvider
+@inject Microsoft.Extensions.Logging.ILogger<TransactionDetailDrawer> Logger
+@implements IDisposable
+
+<div class="drawer-backdrop @(IsOpen ? "open" : "")" @onclick="Close"></div>
+<aside class="drawer @(IsOpen ? "open" : "")" tabindex="0" @ref="drawerRef" @onkeydown="HandleKeyDown" role="dialog" aria-hidden="@(IsOpen?"false":"true")">
+  <div class="drawer-header">
+    <div class="header-left">
+      <div class="tx-id">TX #@(_dto?.Id)</div>
+      <div class="status-badge @(IsError ? "error" : "success")">@(_dto?.Status ?? "—")</div>
+    </div>
+    <div class="header-actions">
+      @if (IsError && string.IsNullOrWhiteSpace(_diagnostic) && !_isAnalyzing)
+      {
+        <button class="btn analyze" @onclick="Analyze">Analizar con IA</button>
+      }
+      <button class="btn close" @onclick="Close">✕</button>
+    </div>
+  </div>
+
+  <div class="drawer-body">
+    <div class="row"><div class="muted">Tarjeta</div><div>@(_dto?.CardLast4 ?? "----")</div></div>
+    <div class="row"><div class="muted">Timestamp</div><div>@(_dto?.Timestamp.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"))</div></div>
+    <div class="row"><div class="muted">Monto</div><div>@(_dto?.Amount.ToString("C"))</div></div>
+    <div class="row"><div class="muted">Canal</div><div>@(_dto?.Channel ?? "—")</div></div>
+
+    @if (IsError)
+    {
+      <div class="row"><div class="muted">Código error</div><div>@(_dto?.ErrorCode ?? "—")</div></div>
+
+      <h4>Diagnóstico IA</h4>
+      <div class="diagnostic-box">
+        @if (!string.IsNullOrWhiteSpace(_diagnostic))
+        {
+          @((MarkupString)RenderMarkdown(_diagnostic))
+        }
+        else
+        {
+          <p class="muted">No hay diagnóstico aún.</p>
+        }
+      </div>
+    }
+  </div>
+</aside>
+
+@code {
+    private TransactionDto? _dto;
+    private string? _diagnostic;
+    private bool _isAnalyzing;
+    private bool IsOpen => _dto != null;
+    private bool IsError => _dto?.Status?.ToLowerInvariant().Contains("fail") ?? false;
+    private ElementReference drawerRef;
+
+    protected override void OnInitialized()
+    {
+        Logger?.LogInformation("TransactionDetailDrawer OnInitialized (prerender or interactive)");
+    }
+
+    // Blazor only calls OnAfterRenderAsync on an interactive instance — it never runs
+    // during static SSR/prerender. Registering here (like NotificationBell does for its
+    // SignalR hub) guarantees we subscribe on the long-lived interactive instance and not
+    // on a prerender instance that gets disposed immediately after.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            Logger?.LogInformation("OnAfterRenderAsync(firstRender): registering with DrawerService");
+            DrawerService.Register(OnDrawerChange);
+        }
+
+        if (IsOpen)
+        {
+            try { await drawerRef.FocusAsync(); } catch (Exception ex) { Logger?.LogDebug(ex, "FocusAsync failed"); }
+        }
+    }
+
+    private void OnDrawerChange(TransactionDto? dto)
+    {
+        Logger?.LogInformation("TransactionDetailDrawer.OnDrawerChange invoked. NewId={Id}", dto?.Id.ToString() ?? "null");
+        _dto = dto;
+        _diagnostic = null;
+        _isAnalyzing = false;
+        InvokeAsync(StateHasChanged);
+
+        if (dto != null && dto.Status?.ToLowerInvariant().Contains("fail") == true)
+        {
+            _ = LoadExistingDiagnosticAsync(dto.Id);
+        }
+    }
+
+    // Loads the most recent persisted diagnostic for this transaction (if any) so
+    // reopening the drawer shows the previous result instead of asking to analyze again.
+    private async Task LoadExistingDiagnosticAsync(int transactionId)
+    {
+        try
+        {
+            var existing = await Db.Diagnostics
+                .Where(d => d.TransactionId == transactionId)
+                .OrderByDescending(d => d.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            // Ignore the result if the drawer moved on to a different transaction while we awaited.
+            if (existing != null && _dto?.Id == transactionId)
+            {
+                _diagnostic = existing.Markdown;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Failed to load existing diagnostic for transaction {Id}", transactionId);
+        }
+    }
+
+    private void Close()
+    {
+        DrawerService.Close();
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") Close();
+    }
+
+    private async Task Analyze()
+    {
+        if (_dto == null) return;
+
+        var transactionId = _dto.Id;
+        _isAnalyzing = true;
+        _diagnostic = "Generando diagnóstico...";
+        StateHasChanged();
+
+        try
+        {
+            var tx = await Db.Transactions.FindAsync(transactionId);
+            if (tx == null)
+            {
+                _diagnostic = "No se encontró la transacción.";
+                return;
+            }
+
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userId = user?.Identity != null && user.Identity.IsAuthenticated
+                ? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                : null;
+
+            // Runs the AI diagnostic and persists it as a Diagnostic row linked to the
+            // transaction (see DiagnosticOrchestratorService.PersistDiagnosticAsync).
+            var markdown = await Orchestrator.RunDiagnosticAsync(tx, userId);
+            if (_dto?.Id == transactionId)
+            {
+                _diagnostic = markdown;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger?.LogError(ex, "Analyze failed for transaction {Id}", transactionId);
+            _diagnostic = "⚠️ No logramos procesar el diagnóstico inteligente en este momento. Por favor, reintentá en unos instantes.";
+        }
+        finally
+        {
+            _isAnalyzing = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // Minimal, safe Markdown->HTML conversion: HTML-encodes the input first (so raw
+    // user/API content can never inject markup), then converts a small supported subset
+    // (bold **text**, "## " headings, "- " list items) into real HTML tags.
+    private static string RenderMarkdown(string md)
+    {
+        if (string.IsNullOrWhiteSpace(md)) return string.Empty;
+        var encoded = System.Net.WebUtility.HtmlEncode(md);
+        encoded = Regex.Replace(encoded, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+
+        var lines = encoded.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        var sb = new System.Text.StringBuilder();
+        bool inList = false;
+
+        foreach (var raw in lines)
+        {
+            var line = raw.Trim();
+            if (line.StartsWith("## "))
+            {
+                if (inList) { sb.AppendLine("</ul>"); inList = false; }
+                sb.AppendLine($"<h5>{line.Substring(3).Trim()}</h5>");
+                continue;
+            }
+            if (line.StartsWith("- "))
+            {
+                if (!inList) { sb.AppendLine("<ul>"); inList = true; }
+                sb.AppendLine($"<li>{line.Substring(2).Trim()}</li>");
+                continue;
+            }
+            if (inList) { sb.AppendLine("</ul>"); inList = false; }
+            sb.AppendLine($"<p>{line}</p>");
+        }
+        if (inList) sb.AppendLine("</ul>");
+        return sb.ToString();
+    }
+
+    public void Dispose()
+    {
+        Logger?.LogInformation("TransactionDetailDrawer disposing and unregistering callback");
+        DrawerService.Unregister(OnDrawerChange);
+    }
+}

@@ -1,5 +1,8 @@
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.Extensions.Logging
 @inherits LayoutComponentBase
+
+@inject ILogger<MainLayout> Logger
 
 @code {
     [CascadingParameter] public Task<AuthenticationState>? authStateTask { get; set; }
@@ -60,6 +63,7 @@
             @Body
         </article>
     </main>
+    <TransactionDetailDrawer @rendermode="InteractiveServer" />
 </div>
 
 <div id="blazor-error-ui" data-nosnippet>

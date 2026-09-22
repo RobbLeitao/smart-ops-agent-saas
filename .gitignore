@@ -427,3 +427,8 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Local SQLite runtime database (not source, changes constantly during dev/testing)
+SmartOps.Web/smartops.db
+SmartOps.Web/smartops.db-shm
+SmartOps.Web/smartops.db-wal

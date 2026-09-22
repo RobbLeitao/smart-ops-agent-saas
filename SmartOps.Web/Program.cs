@@ -170,6 +170,7 @@ var openAiSection = builder.Configuration.GetSection("OpenAI");
 
 // Register TransactionNotifier which bridges publisher events to SignalR
 builder.Services.AddSingleton<SmartOps.Web.Services.TransactionNotifier>();
+    builder.Services.AddSingleton<SmartOps.Web.Services.TransactionDrawerService>();
 // Ensure HubContext is available via SignalR server support; SignalR is included in ASP.NET Core
 builder.Services.AddSignalR();
 

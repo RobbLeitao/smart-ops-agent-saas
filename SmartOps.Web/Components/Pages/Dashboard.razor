@@ -13,6 +13,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @inject NavigationManager NavigationManager
+@inject SmartOps.Web.Services.TransactionDrawerService DrawerService
 
 <div class="dashboard-shell min-vh-100 py-5">
     <div class="container-fluid">
@@ -110,12 +111,10 @@
                         <thead>
                             <tr>
                                 <th class="ps-3">Id</th>
-                                <th>Amount</th>
-                                <th>Currency</th>
-                                <th>Tarjeta</th>
-                                <th>Error</th>
-                                <th>OccurredAt</th>
-                                <th class="text-end pe-3">Actions</th>
+                                <th>Fecha</th>
+                                <th>Monto</th>
+                                <th>Estado</th>
+                                <th class="text-end pe-3">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -123,57 +122,18 @@
                             {
                                 <tr class="align-middle">
                                     <td class="ps-3"><strong>@t.Id</strong></td>
-                                    <td>@t.Amount</td>
-                                    <td>@t.Currency</td>
-                                    <td>
-                                        <span class="badge rounded-pill dashboard-status-pill">@FormatCard(t.CardLast4)</span>
-                                    </td>
+                                    <td>@t.OccurredAt?.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>@t.Amount.ToString("C")</td>
                                     <td>
                                         <span class="badge rounded-pill dashboard-status-pill">@t.Status</span>
-                                        @if (!string.IsNullOrWhiteSpace(t.ErrorMessage))
-                                        {
-                                            <div class="dashboard-chart-copy small mt-1">@t.ErrorMessage</div>
-                                        }
                                     </td>
-                                    <td>@t.OccurredAt?.ToString("g")</td>
                                     <td class="text-end pe-3">
-                                        <button class="btn btn-ia" @onclick="() => AnalyzeAsync(t.Id)" disabled="@IsProcessing(t.Id)">
-                                            @if (IsProcessing(t.Id))
-                                            {
-                                                <span class="spinner-border spinner-sm" role="status" aria-hidden="true"></span>
-                                            }
-                                            else
-                                            {
-                                                <span>Analizar con IA</span>
-                                            }
+                                        <button class="btn btn-detail" @onclick="() => DrawerService.Open(new SmartOps.Web.Services.TransactionDto { Id = t.Id, CardLast4 = t.CardLast4, Timestamp = t.OccurredAt ?? DateTime.UtcNow, Amount = t.Amount, Status = t.Status, Channel = t.Provider, ErrorCode = t.ErrorMessage })">
+                                            <i class="bi bi-search"></i>
+                                            Detalle
                                         </button>
                                     </td>
                                 </tr>
-
-                                if (diagnostics.TryGetValue(t.Id, out var md) && !string.IsNullOrWhiteSpace(md))
-                                {
-                                    <tr>
-                                        <td colspan="7">
-                                            <div class="diagnostic-gem position-relative my-6 animate-fade-in max-w-7xl mx-auto">
-                                                <button type="button" class="btn-close position-absolute" style="right:12px;top:12px;filter:invert(1);" aria-label="Close" @onclick="() => CloseDiagnostic(t.Id)"></button>
-                                                <div class="diagnostic-content prose max-w-none leading-relaxed" style="font-family:Segoe UI, Roboto, Arial, sans-serif;">
-                                                    @((MarkupString)RenderMarkdown(md))
-                                                </div>
-
-                                                @if (technicalDetails.TryGetValue(t.Id, out var tech) && !string.IsNullOrWhiteSpace(tech))
-                                                {
-                                                    <div class="mt-4">
-                                                        <a href="#" class="text-slate-400" @onclick="(e) => ToggleTech(e, t.Id)">[+] Ver detalles técnicos</a>
-                                                        @if (showTech.Contains(t.Id))
-                                                        {
-                                                            <pre class="mt-2" style="background:#0f1724;padding:10px;border-radius:6px;font-size:12px;color:#d1d5db;">@tech</pre>
-                                                        }
-                                                    </div>
-                                                }
-                                            </div>
-                                        </td>
-                                    </tr>
-                                }
                             }
                         </tbody>
                     </table>
