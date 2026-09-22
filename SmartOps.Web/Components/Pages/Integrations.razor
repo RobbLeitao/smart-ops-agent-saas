@@ -66,17 +66,25 @@
                     <div class="text-cyan-300 small mb-3">Credenciales</div>
                     <div class="row g-3">
                         <div class="col-lg-6">
-                            <label class="form-label text-slate-200">API Key</label>
+                            <label class="form-label text-slate-200">API Key <span class="text-danger">*</span></label>
                             <div class="input-group">
-                                <input class="form-control bg-[#11151b] border-0 text-slate-200" type="@ApiKeyInputType" @bind="ApiKey" placeholder="sk-..." />
+                                <input class="form-control bg-[#11151b] border-0 text-slate-200 @(ShowValidationErrors && string.IsNullOrWhiteSpace(ApiKey) ? "is-invalid" : string.Empty)" type="@ApiKeyInputType" @bind="ApiKey" placeholder="sk-..." />
                                 <button class="btn btn-outline-secondary" type="button" @onclick="ToggleApiKeyVisibility">
                                     @(ShowApiKey ? "Ocultar" : "Mostrar")
                                 </button>
                             </div>
+                            @if (ShowValidationErrors && string.IsNullOrWhiteSpace(ApiKey))
+                            {
+                                <div class="text-danger small mt-1">La API Key es obligatoria.</div>
+                            }
                         </div>
                         <div class="col-lg-6">
-                            <label class="form-label text-slate-200">Model ID</label>
-                            <input class="form-control bg-[#11151b] border-0 text-slate-200" @bind="ModelId" placeholder="gpt-4o" />
+                            <label class="form-label text-slate-200">Model ID <span class="text-danger">*</span></label>
+                            <input class="form-control bg-[#11151b] border-0 text-slate-200 @(ShowValidationErrors && string.IsNullOrWhiteSpace(ModelId) ? "is-invalid" : string.Empty)" @bind="ModelId" placeholder="gpt-4o" />
+                            @if (ShowValidationErrors && string.IsNullOrWhiteSpace(ModelId))
+                            {
+                                <div class="text-danger small mt-1">El Model ID es obligatorio.</div>
+                            }
                         </div>
                     </div>
                 </div>
@@ -103,6 +111,13 @@
                     Configuración actualizada correctamente
                 </div>
             }
+
+            @if (ShowValidationErrors && SelectedProvider == ModelProvider.OpenAI && (string.IsNullOrWhiteSpace(ApiKey) || string.IsNullOrWhiteSpace(ModelId)))
+            {
+                <div class="mt-4 alert alert-danger">
+                    Completá API Key y Model ID antes de guardar la configuración.
+                </div>
+            }
         </div>
     </div>
 </div>
@@ -120,6 +135,7 @@
     private bool ShowApiKey;
     private bool IsSaving;
     private bool ShowToast;
+    private bool ShowValidationErrors;
 
     private string ApiKeyInputType => ShowApiKey ? "text" : "password";
 
@@ -129,6 +145,10 @@
     private void SelectProvider(ModelProvider provider)
     {
         SelectedProvider = provider;
+        if (provider == ModelProvider.Local)
+        {
+            ShowValidationErrors = false;
+        }
     }
 
     private void ToggleApiKeyVisibility()
@@ -163,6 +183,15 @@
 
     private async Task SaveConfigurationAsync()
     {
+        ShowValidationErrors = true;
+
+        if (SelectedProvider == ModelProvider.OpenAI &&
+            (string.IsNullOrWhiteSpace(ApiKey) || string.IsNullOrWhiteSpace(ModelId)))
+        {
+            StateHasChanged();
+            return;
+        }
+
         IsSaving = true;
         ShowToast = false;
         StateHasChanged();
@@ -184,6 +213,7 @@
 
             tran.Commit();
             ShowToast = true;
+            ShowValidationErrors = false;
         }
         catch (Exception ex)
         {
