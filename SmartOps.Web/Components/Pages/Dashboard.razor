@@ -15,40 +15,6 @@
 @inject NavigationManager NavigationManager
 @inject SmartOps.Web.Services.TransactionDrawerService DrawerService
 
-<style>
-    .dashboard-entry-overlay {
-        position: fixed;
-        inset: 0;
-        z-index: 2000;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background:
-            radial-gradient(circle at 50% 40%, rgba(34, 211, 238, 0.16), transparent 45%),
-            radial-gradient(circle at 60% 65%, rgba(139, 92, 246, 0.14), transparent 40%),
-            #0a0d14;
-        animation: dashboardEntryFade 0.9s ease-out forwards;
-    }
-
-    .dashboard-entry-logo {
-        width: 260px;
-        height: 260px;
-        object-fit: contain;
-        border-radius: 20px;
-        filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.55));
-    }
-
-    @@keyframes dashboardEntryFade {
-        0% { opacity: 1; pointer-events: auto; visibility: visible; }
-        35% { opacity: 1; }
-        100% { opacity: 0; pointer-events: none; visibility: hidden; }
-    }
-</style>
-
-<div class="dashboard-entry-overlay">
-    <img src="images/logo.png" alt="SmartOps" class="dashboard-entry-logo" />
-</div>
-
 <div class="dashboard-shell min-vh-100 py-5">
     <div class="container-fluid">
         <section class="dashboard-panel dashboard-hero mb-4">
