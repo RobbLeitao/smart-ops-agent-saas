@@ -30,8 +30,8 @@
     }
 
     .login-loader-logo {
-        width: 115px;
-        height: 115px;
+        width: 173px;
+        height: 173px;
         object-fit: contain;
         border-radius: 20px;
         animation: loginLoaderPulse 1.4s ease-in-out infinite;
@@ -125,7 +125,7 @@
                 // revealed again; the Dashboard itself fades in once it loads.
                 isLoading = true;
                 StateHasChanged();
-                await Task.Delay(900);
+                await Task.Delay(1900);
                 Navigation.NavigateTo("/", true);
             }
             else if (status == 401)

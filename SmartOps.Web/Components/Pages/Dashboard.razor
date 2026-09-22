@@ -48,25 +48,25 @@
         <section class="dashboard-kpi-grid mb-4">
             <article class="dashboard-panel dashboard-metric-card" style="--accent:#22d3ee;">
                 <div class="dashboard-metric-label">Tasa de Aprobación (%)</div>
-                <div class="dashboard-metric-value" id="metric-success-rate">@SuccessRateDisplay</div>
+                <div class="dashboard-metric-value" id="metric-success-rate">@AnimatedSuccessRateDisplay</div>
                 <div class="dashboard-metric-subtitle">Sobre el conjunto de transacciones cargado.</div>
             </article>
 
             <article class="dashboard-panel dashboard-metric-card" style="--accent:#ef4444;">
                 <div class="dashboard-metric-label">Transacciones Fallidas</div>
-                <div class="dashboard-metric-value" id="metric-failed-count">@FailedTransactionsCount</div>
+                <div class="dashboard-metric-value" id="metric-failed-count">@_animatedFailedCount</div>
                 <div class="dashboard-metric-subtitle">Casos listos para análisis o revisión.</div>
             </article>
 
             <article class="dashboard-panel dashboard-metric-card" style="--accent:#8b5cf6;">
                 <div class="dashboard-metric-label">Diagnósticos Realizados por IA</div>
-                <div class="dashboard-metric-value" id="metric-diagnostics-count">@DiagnosticsCount</div>
+                <div class="dashboard-metric-value" id="metric-diagnostics-count">@_animatedDiagnosticsCount</div>
                 <div class="dashboard-metric-subtitle">Resultados generados por el motor inteligente.</div>
             </article>
 
             <article class="dashboard-panel dashboard-metric-card" style="--accent:#14b8a6;">
                 <div class="dashboard-metric-label">Efectividad de IA (%)</div>
-                <div class="dashboard-metric-value" id="metric-useful-percent">@UsefulPercentDisplay</div>
+                <div class="dashboard-metric-value" id="metric-useful-percent">@AnimatedUsefulPercentDisplay</div>
                 <div class="dashboard-metric-subtitle">Porcentaje de diagnósticos marcados como útiles.</div>
             </article>
         </section>
@@ -400,6 +400,12 @@
 
     private string SuccessRateDisplay => SuccessRatePercent + "%";
     private string UsefulPercentDisplay => UsefulPercent < 0 ? "N/A" : UsefulPercent + "%";
+
+    // These drive the KPI card markup instead of the raw final values: they only change once
+    // the count-up JS animation actually finishes, so the initial/rerender paint always starts
+    // at the last animated value (0 on first load) instead of flashing the final number first.
+    private string AnimatedSuccessRateDisplay => _animatedSuccessRate + "%";
+    private string AnimatedUsefulPercentDisplay => UsefulPercent < 0 ? "N/A" : _animatedUsefulPercent + "%";
 
     private async Task ReloadDashboardAsync()
     {
