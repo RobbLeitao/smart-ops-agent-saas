@@ -10,20 +10,65 @@
     .login-panel { max-width:420px;margin:80px auto;padding:28px;border-radius:12px;background:#1e2330;border:1px solid rgba(255,255,255,0.04); }
     .login-panel h3 { color:#e6eef8; }
     .login-label { color:#cbd5e1; }
+
+    .login-loader-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background:
+            radial-gradient(circle at 50% 40%, rgba(34, 211, 238, 0.16), transparent 45%),
+            radial-gradient(circle at 60% 65%, rgba(139, 92, 246, 0.14), transparent 40%),
+            rgba(10, 13, 20, 0.92);
+        animation: loginLoaderFadeIn 0.25s ease-out;
+    }
+
+    .login-loader-content {
+        text-align: center;
+    }
+
+    .login-loader-logo {
+        width: 96px;
+        height: 96px;
+        object-fit: contain;
+        border-radius: 20px;
+        animation: loginLoaderPulse 1.4s ease-in-out infinite;
+        filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.55));
+    }
+
+    .login-loader-text {
+        margin-top: 1rem;
+        color: #cbd5e1;
+        font-size: 0.9rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    @@keyframes loginLoaderPulse {
+        0%, 100% { transform: scale(1); filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.55)); }
+        50% { transform: scale(1.08); filter: drop-shadow(0 0 28px rgba(139, 92, 246, 0.65)); }
+    }
+
+    @@keyframes loginLoaderFadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
 </style>
 
 <div class="login-panel">
     <h3>Iniciar Sesión</h3>
     <div class="mb-3">
         <label class="login-label">Email</label>
-        <input class="form-control bg-transparent text-white border-1" @bind="Email" />
+        <input class="form-control bg-transparent text-white border-1" @bind="Email" disabled="@isLoading" />
     </div>
     <div class="mb-3">
         <label class="login-label">Contraseña</label>
-        <input class="form-control bg-transparent text-white" type="password" @bind="Password" />
+        <input class="form-control bg-transparent text-white" type="password" @bind="Password" disabled="@isLoading" />
     </div>
     <div class="d-flex gap-2">
-        <button class="btn btn-primary" @onclick="HandleLogin">Entrar</button>
+        <button class="btn btn-primary" @onclick="HandleLogin" disabled="@isLoading">Entrar</button>
 
     </div>
     @if (!string.IsNullOrEmpty(ErrorMessage))
@@ -32,13 +77,26 @@
     }
 </div>
 
+@if (isLoading)
+{
+    <div class="login-loader-overlay">
+        <div class="login-loader-content">
+            <img src="images/logo.png" alt="SmartOps" class="login-loader-logo" />
+            <div class="login-loader-text">Iniciando sesión...</div>
+        </div>
+    </div>
+}
+
 @code {
     private string Email { get; set; } = string.Empty;
     private string Password { get; set; } = string.Empty;
     private string? ErrorMessage;
+    private bool isLoading;
 
     private async Task HandleLogin()
     {
+        if (isLoading) return;
+
         ErrorMessage = null;
 
         // Validation: require both fields
@@ -61,6 +119,11 @@
             var text = doc.RootElement.GetProperty("text").GetString() ?? string.Empty;
             if (status >= 200 && status <= 299)
             {
+                // Show a brief branded loader before the forced full-page navigation to the
+                // Dashboard, instead of an abrupt jump straight to the new page.
+                isLoading = true;
+                StateHasChanged();
+                await Task.Delay(900);
                 Navigation.NavigateTo("/", true);
             }
             else if (status == 401)
