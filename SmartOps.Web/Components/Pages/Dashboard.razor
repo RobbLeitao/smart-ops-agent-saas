@@ -48,25 +48,25 @@
         <section class="dashboard-kpi-grid mb-4">
             <article class="dashboard-panel dashboard-metric-card" style="--accent:#22d3ee;">
                 <div class="dashboard-metric-label">Tasa de Aprobación (%)</div>
-                <div class="dashboard-metric-value">@SuccessRateDisplay</div>
+                <div class="dashboard-metric-value" id="metric-success-rate">@SuccessRateDisplay</div>
                 <div class="dashboard-metric-subtitle">Sobre el conjunto de transacciones cargado.</div>
             </article>
 
             <article class="dashboard-panel dashboard-metric-card" style="--accent:#ef4444;">
                 <div class="dashboard-metric-label">Transacciones Fallidas</div>
-                <div class="dashboard-metric-value">@FailedTransactionsCount</div>
+                <div class="dashboard-metric-value" id="metric-failed-count">@FailedTransactionsCount</div>
                 <div class="dashboard-metric-subtitle">Casos listos para análisis o revisión.</div>
             </article>
 
             <article class="dashboard-panel dashboard-metric-card" style="--accent:#8b5cf6;">
                 <div class="dashboard-metric-label">Diagnósticos Realizados por IA</div>
-                <div class="dashboard-metric-value">@DiagnosticsCount</div>
+                <div class="dashboard-metric-value" id="metric-diagnostics-count">@DiagnosticsCount</div>
                 <div class="dashboard-metric-subtitle">Resultados generados por el motor inteligente.</div>
             </article>
 
             <article class="dashboard-panel dashboard-metric-card" style="--accent:#14b8a6;">
                 <div class="dashboard-metric-label">Efectividad de IA (%)</div>
-                <div class="dashboard-metric-value">@UsefulPercentDisplay</div>
+                <div class="dashboard-metric-value" id="metric-useful-percent">@UsefulPercentDisplay</div>
                 <div class="dashboard-metric-subtitle">Porcentaje de diagnósticos marcados como útiles.</div>
             </article>
         </section>
@@ -228,6 +228,16 @@
     private readonly HashSet<int> showTech = new();
     private string filterLast4 = string.Empty;
 
+    // Count-up animation bookkeeping for the KPI cards: tracks the last value that was
+    // actually animated to, so live SignalR updates animate from the previous value
+    // (not always from zero) while the very first render still counts up from zero.
+    private bool metricsDirty = true;
+    private bool metricsAnimatedOnce;
+    private int _animatedSuccessRate;
+    private int _animatedFailedCount;
+    private int _animatedDiagnosticsCount;
+    private int _animatedUsefulPercent;
+
     // SignalR real-time
     private HubConnection? hubConnection;
     private bool realtimePaused = false;
@@ -324,6 +334,7 @@
 
                         var total = ApprovedTransactionsCount + FailedTransactionsCount;
                         SuccessRatePercent = total == 0 ? 0 : (int)Math.Round(ApprovedTransactionsCount * 100.0 / total);
+                        metricsDirty = true;
 
                         if (!string.IsNullOrWhiteSpace(tx.ErrorMessage))
                         {
@@ -347,6 +358,12 @@
             {
                 Logger.LogWarning(ex, "Failed to start SignalR connection for dashboard.");
             }
+        }
+
+        if (metricsDirty)
+        {
+            await AnimateMetricsAsync();
+            metricsDirty = false;
         }
 
         if (!showChartsModal || !chartsDirty || chartsRendering)
@@ -425,6 +442,38 @@
         FailureReasons = metrics.FailureReasons.ToList();
         FailedChartCount = metrics.FailedChartCount;
         ApprovedChartCount = metrics.ApprovedChartCount;
+        metricsDirty = true;
+    }
+
+    private async Task AnimateMetricsAsync()
+    {
+        var fromSuccess = metricsAnimatedOnce ? _animatedSuccessRate : 0;
+        var fromFailed = metricsAnimatedOnce ? _animatedFailedCount : 0;
+        var fromDiagnostics = metricsAnimatedOnce ? _animatedDiagnosticsCount : 0;
+        var fromUseful = metricsAnimatedOnce ? _animatedUsefulPercent : 0;
+
+        try
+        {
+            await JS.InvokeVoidAsync("smartOpsAnimations.countUp", "metric-success-rate", fromSuccess, SuccessRatePercent, "%", 1200);
+            await JS.InvokeVoidAsync("smartOpsAnimations.countUp", "metric-failed-count", fromFailed, FailedTransactionsCount, "", 1200);
+            await JS.InvokeVoidAsync("smartOpsAnimations.countUp", "metric-diagnostics-count", fromDiagnostics, DiagnosticsCount, "", 1200);
+
+            // "N/A" (UsefulPercent < 0) has no numeric value to count up; leave it as static text.
+            if (UsefulPercent >= 0)
+            {
+                await JS.InvokeVoidAsync("smartOpsAnimations.countUp", "metric-useful-percent", Math.Max(fromUseful, 0), UsefulPercent, "%", 1200);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to animate dashboard metric cards.");
+        }
+
+        _animatedSuccessRate = SuccessRatePercent;
+        _animatedFailedCount = FailedTransactionsCount;
+        _animatedDiagnosticsCount = DiagnosticsCount;
+        _animatedUsefulPercent = UsefulPercent;
+        metricsAnimatedOnce = true;
     }
 
     private async Task LoadGridAsync()
