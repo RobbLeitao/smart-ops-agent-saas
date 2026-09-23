@@ -1,0 +1,143 @@
+/* Dropdown panel: matches the dark/cyberpunk palette used by the drawers and
+   dashboard panels (bg #1e2330, subtle slate border + cyan glow). */
+/* Transparent full-viewport backdrop used to detect outside clicks and close the
+   dropdown, same pattern as TransactionDetailDrawer's backdrop. */
+.notif-backdrop {
+    position: fixed;
+    inset: 0;
+    background: transparent;
+    z-index: 99997;
+}
+
+.notif-panel {
+    background: linear-gradient(180deg, #1e2330 0%, #171c26 100%);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 0.9rem;
+    box-shadow: 0 20px 60px rgba(2, 6, 23, 0.55), 0 0 24px rgba(34, 211, 238, 0.08);
+    color: #e6eef8;
+    overflow: hidden;
+}
+
+.notif-panel:focus,
+.notif-panel:focus-visible {
+    outline: none;
+}
+
+.notif-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.notif-title {
+    color: #f8fafc;
+    font-weight: 700;
+}
+
+.notif-mark-all {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 0.8rem;
+    padding: 2px 4px;
+}
+
+.notif-mark-all:hover {
+    color: #22d3ee;
+    text-decoration: underline;
+}
+
+.notif-list {
+    max-height: 320px;
+    overflow: auto;
+}
+
+.notif-item {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+    padding: 10px 14px;
+    transition: background-color 0.15s ease;
+}
+
+.notif-item:last-child {
+    border-bottom: none;
+}
+
+.notif-item:hover {
+    background: rgba(34, 211, 238, 0.05);
+}
+
+.notif-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: rgba(239, 68, 68, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.notif-icon .bi {
+    color: #ef4444;
+}
+
+.notif-item-title {
+    color: #e6eef8;
+    font-size: 0.85rem;
+}
+
+.notif-item-meta {
+    color: #94a3b8;
+    font-size: 0.78rem;
+}
+
+.notif-item-ago {
+    color: #64748b;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.notif-btn-analyze {
+    background: #635bff;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.notif-btn-analyze:hover {
+    background: #4a43d1;
+}
+
+.notif-link-read {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 0.78rem;
+    padding: 4px 6px;
+}
+
+.notif-link-read:hover {
+    color: #22d3ee;
+    text-decoration: underline;
+}
+
+/* Non-interactive counterpart of .notif-link-read shown once a notification is
+   already marked as read: same font/size, no button semantics or hover state. */
+.notif-read-label {
+    color: #64748b;
+    font-size: 0.78rem;
+    padding: 4px 6px;
+}
+
+.notif-empty {
+    color: #94a3b8;
+    font-size: 0.85rem;
+    padding: 18px 14px;
+    text-align: center;
+}
+
+.notif-bell-badge {
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.65);
+}

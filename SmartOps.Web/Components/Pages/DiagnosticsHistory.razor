@@ -10,9 +10,9 @@
 @inject Microsoft.AspNetCore.Identity.UserManager<SmartOps.Infrastructure.Data.ApplicationUser> UserManager
 
 <LoggingErrorBoundary>
-<div class="min-vh-100 py-5" style="background-color:transparent;">
-    <div class="container-fluid">
-        <div class="grid-dark p-4 bg-[#1e2330] rounded-lg" style="background-color:transparent;">
+<div class="py-5 diag-history-shell" style="background-color:transparent;">
+    <div class="container-fluid diag-history-container">
+        <div class="grid-dark p-4 bg-[#1e2330] rounded-lg diag-history-card" style="background-color:transparent;">
             <div class="mb-3">
                 <h3 class="dashboard-chart-title">Historial de Diagnósticos</h3>
                 <p class="dashboard-chart-copy mb-0">Registros de diagnósticos generados por el sistema</p>
@@ -44,7 +44,7 @@
                 </div>
             </div>
 
-            <div class="table-responsive" style="background:transparent;max-height:400px;overflow-y:auto;">
+            <div class="table-responsive diag-history-table" style="background:transparent;overflow-y:auto;">
                 @if (diagnostics == null)
                 {
                     <div class="py-4 text-slate-400">Cargando...</div>
