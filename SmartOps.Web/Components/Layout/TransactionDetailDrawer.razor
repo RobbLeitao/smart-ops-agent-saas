@@ -39,7 +39,7 @@
       <div class="diagnostic-box">
         @if (_isAnalyzing)
         {
-          <div class="drawer-loader">
+          <div class="drawer-loader @(_loaderClosing ? "closing" : "")">
             <img src="/images/logo.png" alt="SmartOps" class="drawer-loader-logo" />
             <div class="drawer-loader-text">Analizando con IA...</div>
           </div>
@@ -66,10 +66,16 @@
     // than this (see Analyze()). Keeps the UI from "flashing" the loader imperceptibly.
     private static readonly TimeSpan MinLoaderVisibleDuration = TimeSpan.FromMilliseconds(450);
 
+    // Must match the CSS "drawerLoaderFadeOut" animation duration, so the element stays
+    // mounted (with the "closing" class applied) exactly long enough for the fade-out to
+    // play before it's actually removed from the DOM.
+    private static readonly TimeSpan LoaderFadeOutDuration = TimeSpan.FromMilliseconds(220);
+
     private TransactionDto? _dto;
     private string? _diagnostic;
     private string? _analyzeError;
     private bool _isAnalyzing;
+    private bool _loaderClosing;
     private bool IsOpen => _dto != null;
     private bool IsError => _dto?.Status?.ToLowerInvariant().Contains("fail") ?? false;
     private ElementReference drawerRef;
@@ -104,6 +110,7 @@
         _diagnostic = null;
         _analyzeError = null;
         _isAnalyzing = false;
+        _loaderClosing = false;
         InvokeAsync(StateHasChanged);
 
         if (dto != null && dto.Status?.ToLowerInvariant().Contains("fail") == true)
@@ -153,6 +160,7 @@
 
         var transactionId = _dto.Id;
         _isAnalyzing = true;
+        _loaderClosing = false;
         _analyzeError = null;
         _diagnostic = null;
         StateHasChanged();
@@ -193,11 +201,17 @@
         }
         finally
         {
-            // Always waits out the minimum visible duration and clears the loader/disabled
-            // state, whether Analyze succeeded, failed, or hit the early "transaction not
-            // found" return above — never left stuck showing the loader.
+            // Always waits out the minimum visible duration, then plays the fade-out
+            // animation (via the "closing" CSS class) before actually hiding the loader
+            // and clearing the disabled state — whether Analyze succeeded, failed, or hit
+            // the early "transaction not found" return above — never left stuck showing
+            // the loader, and never swapped out abruptly.
             await minLoaderVisibleTask;
+            _loaderClosing = true;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(LoaderFadeOutDuration);
             _isAnalyzing = false;
+            _loaderClosing = false;
             await InvokeAsync(StateHasChanged);
         }
     }
