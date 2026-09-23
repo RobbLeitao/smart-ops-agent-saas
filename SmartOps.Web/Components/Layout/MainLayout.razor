@@ -1,20 +1,44 @@
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Http
 @using Microsoft.Extensions.Logging
 @inherits LayoutComponentBase
 
 @inject ILogger<MainLayout> Logger
+@inject IHttpContextAccessor HttpContextAccessor
 
 @code {
     [CascadingParameter] public Task<AuthenticationState>? authStateTask { get; set; }
 
     AuthenticationState? authState;
 
+    // True only for the single request immediately following a successful login (the forced
+    // full-page navigation Login.razor performs). Read once from a short-lived, server-only
+    // cookie set by the /account/login endpoint, then cleared, so the overlay is part of the
+    // very first rendered HTML for that request - no client-side JS delay/gap where the
+    // Dashboard would otherwise flash before the overlay appears. Every other request/navigation
+    // (tab switches, refreshes) never has this cookie and renders the overlay hidden as usual.
+    private bool showTransitionOverlayOnLoad;
+
     protected override async Task OnParametersSetAsync()
     {
         if (authStateTask != null)
             authState = await authStateTask;
     }
+
+    protected override void OnInitialized()
+    {
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext != null && httpContext.Request.Cookies.ContainsKey("smartops_transition"))
+        {
+            showTransitionOverlayOnLoad = true;
+            httpContext.Response.Cookies.Delete("smartops_transition", new CookieOptions { Path = "/" });
+        }
+    }
 }
+
+<div id="page-transition-overlay" class="page-transition-overlay @(showTransitionOverlayOnLoad ? "" : "page-transition-hidden")">
+    <img src="/images/logo.png" alt="SmartOps" class="page-transition-logo" />
+</div>
 
 <div class="page w-100">
     <header class="header-bar shadow-sm" style="background-color:#212835;border-bottom:1px solid rgba(71,85,103,0.2);">
