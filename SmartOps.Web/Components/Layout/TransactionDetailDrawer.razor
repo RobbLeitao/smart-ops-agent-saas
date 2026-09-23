@@ -64,7 +64,7 @@
 @code {
     // Floor for how long the AI loader stays visible, even if the response arrives sooner
     // than this (see Analyze()). Keeps the UI from "flashing" the loader imperceptibly.
-    private static readonly TimeSpan MinLoaderVisibleDuration = TimeSpan.FromMilliseconds(450);
+    private static readonly TimeSpan MinLoaderVisibleDuration = TimeSpan.FromMilliseconds(550);
 
     // Must match the CSS "drawerLoaderFadeOut" animation duration, so the element stays
     // mounted (with the "closing" class applied) exactly long enough for the fade-out to

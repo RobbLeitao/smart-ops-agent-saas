@@ -33,7 +33,7 @@
    animation), shown inline while the AI diagnostic call is in flight. Fades in on mount
    and fades out (via the "closing" class, toggled from code-behind) before it's removed,
    so it never appears/disappears abruptly. */
-.drawer-loader{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 0;animation:drawerLoaderFadeIn 0.25s ease-out;}
+.drawer-loader{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 0;opacity:0;animation:drawerLoaderFadeIn 0.4s ease-in-out forwards;}
 .drawer-loader.closing{animation:drawerLoaderFadeOut 0.22s ease-in forwards;}
 .drawer-loader-logo{width:96px;height:96px;object-fit:contain;border-radius:14px;animation:drawerLoaderPulse 1.4s ease-in-out infinite;filter:drop-shadow(0 0 14px rgba(34,211,238,0.55));}
 .drawer-loader-text{margin-top:10px;color:#cbd5e1;font-size:0.8rem;letter-spacing:0.08em;text-transform:uppercase;}
