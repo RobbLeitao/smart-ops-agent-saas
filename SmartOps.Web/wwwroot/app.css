@@ -250,6 +250,37 @@ a, .btn-link {
     color: #0f1724 !important; /* dark text on semi-transparent white */
 }
 
+/* Diagnostics History tab: stretch the card + grid down to fill the available viewport
+   height (instead of shrink-wrapping to content), leaving a small margin below, so there's
+   no big empty gap under the table. The chain below uses a real "height" (not min-height)
+   at the top so descendant flex items get a definite size to grow/shrink into — with
+   min-height:0 at every level so the table's own overflow-y:auto kicks in instead of the
+   whole page growing past the viewport. Scoped to this page only (class names are unique).
+   96px approximates the header bar's rendered height plus a small safety margin. */
+.diag-history-shell {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 123px);
+    overflow: hidden;
+}
+.diag-history-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+.diag-history-card {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+.diag-history-table {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
 .shadow-lg { box-shadow: 0 8px 24px rgba(2,6,23,0.6); }
 .border-gray-200 { border-color: rgba(229,231,235,0.04); }
 
@@ -291,6 +322,22 @@ a, .btn-link {
        vertical space than the content actually needs. */
     padding-top: 1rem !important;
     padding-bottom: 1rem !important;
+    /* Same technique as the Diagnostics History page: a real, definite viewport-based
+       height (not min-height) + min-height:0 cascading through each flex level below, so
+       the transactions table scrolls internally instead of growing the whole page past
+       the viewport. 123px matches the header bar + article padding measured for this
+       layout (shared across Dashboard/Historial/Integraciones). */
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 123px);
+    overflow: hidden;
+}
+
+.dashboard-shell > .container-fluid {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 
 .dashboard-panel {
@@ -487,10 +534,15 @@ a, .btn-link {
 
 .dashboard-table-card {
     padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
 
 .dashboard-table-wrap {
-    max-height: 420px;
+    flex: 1;
+    min-height: 0;
     overflow: auto;
     border-radius: 0.9rem;
 }
