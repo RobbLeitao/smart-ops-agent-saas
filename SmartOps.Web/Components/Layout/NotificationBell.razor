@@ -15,45 +15,47 @@
         <i class="bi bi-bell" style="font-size:18px;color:#cbd5e1"></i>
         @if (UnreadCount > 0)
         {
-            <span class="badge bg-danger position-absolute" style="top:-6px;right:-6px;pointer-events:none;">@UnreadCount</span>
+            <span class="badge bg-danger position-absolute notif-bell-badge" style="top:-6px;right:-6px;pointer-events:none;">@UnreadCount</span>
         }
     </button>
 
     @if (open)
     {
-        <div class="card shadow" style="position:absolute;right:0;top:36px;width:320px;z-index:99998;" @onclick:stopPropagation>
-            <div class="card-body p-2">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <strong>Notificaciones</strong>
-                    <button class="btn btn-link btn-sm" @onclick:stopPropagation @onclick="MarkAllRead">Marcar todas como leídas</button>
-                </div>
-                <div style="max-height:320px;overflow:auto;">
-                    @foreach(var n in notifications)
-                    {
-                        <div class="d-flex align-items-start gap-2 p-2 mb-1" style="border-bottom:1px solid rgba(255,255,255,0.03);">
-                            <div style="width:36px;height:36px;border-radius:8px;background:#1f2937;display:flex;align-items:center;justify-content:center;">
-                                <i class="bi bi-exclamation-circle text-danger"></i>
+        <div class="notif-panel" style="position:absolute;right:0;top:36px;width:320px;z-index:99998;" @onclick:stopPropagation>
+            <div class="notif-header d-flex justify-content-between align-items-center">
+                <span class="notif-title">Notificaciones</span>
+                <button class="notif-mark-all" @onclick:stopPropagation @onclick="MarkAllRead">Marcar todas como leídas</button>
+            </div>
+            <div class="notif-list">
+                @if (notifications.Count == 0)
+                {
+                    <div class="notif-empty">No hay notificaciones.</div>
+                }
+                @foreach(var n in notifications)
+                {
+                    <div class="d-flex align-items-start gap-2 notif-item">
+                        <div class="notif-icon">
+                            <i class="bi bi-exclamation-circle"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <div class="notif-item-title">@n.Title</div>
+                                    <div class="notif-item-meta">Tarjeta •••• @GetLast4(n.TransactionId) — @n.Message</div>
+                                </div>
+                                <div class="notif-item-ago">@GetAgo(n.CreatedAt)</div>
                             </div>
-                            <div class="flex-grow-1">
-                                <div class="d-flex justify-content-between">
-                                    <div>
-                                        <div class="small">@n.Title</div>
-                                        <div class="small text-muted">Tarjeta •••• @GetLast4(n.TransactionId) — @n.Message</div>
-                                    </div>
-                                    <div class="text-muted small">@GetAgo(n.CreatedAt)</div>
-                                </div>
-                                <div class="mt-1 d-flex gap-2">
-                                    @if (!n.IsRead)
-                                    {
-                                        <span class="badge bg-primary">Nuevo</span>
-                                    }
-                                    <button class="btn btn-sm btn-outline-primary btn-xs" @onclick:stopPropagation @onclick="() => Analyze(n.TransactionId, n.Id)">Analizar con IA</button>
-                                    <button class="btn btn-sm btn-link" @onclick:stopPropagation @onclick="() => MarkAsRead(n.Id)">Marcar leída</button>
-                                </div>
+                            <div class="mt-1 d-flex align-items-center gap-2">
+                                @if (!n.IsRead)
+                                {
+                                    <span class="notif-badge-new">Nuevo</span>
+                                }
+                                <button class="notif-btn-analyze" @onclick:stopPropagation @onclick="() => Analyze(n.TransactionId, n.Id)">Analizar con IA</button>
+                                <button class="notif-link-read" @onclick:stopPropagation @onclick="() => MarkAsRead(n.Id)">Marcar leída</button>
                             </div>
                         </div>
-                    }
-                </div>
+                    </div>
+                }
             </div>
         </div>
     }
