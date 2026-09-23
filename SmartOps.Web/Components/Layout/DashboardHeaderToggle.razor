@@ -1,0 +1,36 @@
+@* Small interactive island (mirrors NotificationBell/TransactionDetailDrawer's pattern of
+   an InteractiveServer component embedded inside the otherwise static MainLayout) that
+   surfaces the Dashboard's "Pausar/Reanudar notificaciones" action in the shared header.
+   Hidden on any page where Dashboard hasn't registered itself (e.g. Historial, Integraciones). *@
+@using SmartOps.Web.Services
+@inject DashboardHeaderActionsService HeaderActions
+@implements IDisposable
+
+@if (HeaderActions.IsRegistered)
+{
+    <button class="btn btn-sm" style="background:transparent;color:#cbd5e1;border:1px solid rgba(148,163,184,0.08);padding:6px 10px;border-radius:8px;" @onclick="Toggle">
+        @(HeaderActions.IsPaused ? "Reanudar notificaciones" : "Pausar notificaciones")
+    </button>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        HeaderActions.OnChange += HandleChange;
+    }
+
+    private void HandleChange()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Toggle()
+    {
+        await HeaderActions.ToggleAsync();
+    }
+
+    public void Dispose()
+    {
+        HeaderActions.OnChange -= HandleChange;
+    }
+}

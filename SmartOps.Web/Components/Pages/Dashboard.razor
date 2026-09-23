@@ -14,37 +14,10 @@
 @inject IJSRuntime JS
 @inject NavigationManager NavigationManager
 @inject SmartOps.Web.Services.TransactionDrawerService DrawerService
+@inject SmartOps.Web.Services.DashboardHeaderActionsService HeaderActions
 
 <div class="dashboard-shell py-5">
     <div class="container-fluid">
-        <section class="dashboard-panel dashboard-hero mb-4">
-            <div class="d-flex flex-column flex-xl-row gap-3 justify-content-between align-items-xl-center dashboard-hero-inner">
-                <div>
-                    <div class="dashboard-chip mb-3">
-                        <i class="bi bi-broadcast"></i>
-                        <span>Centro de operaciones de IA</span>
-                    </div>
-                </div>
-
-                <div class="d-flex flex-wrap gap-2">
-                    <span class="dashboard-chip">
-                        <i class="bi bi-activity"></i>
-                        <span>@DiagnosticsCount diagnósticos</span>
-                        <button type="button" class="btn btn-sm btn-outline-light dashboard-chip-action" @onclick="OpenChartsModal">
-                            <i class="bi bi-graph-up"></i>
-                            <span>Ver gráficos</span>
-                        </button>
-                    </span>
-                    <span class="dashboard-chip"><i class="bi bi-shield-check"></i><span>@SuccessRateDisplay aprobación</span></span>
-                    <span class="dashboard-chip"><i class="bi bi-robot"></i><span>@UsefulPercentDisplay IA útil</span></span>
-                </div>
-
-                <div class="ms-3">
-                    <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleRealtime">@(realtimePaused ? "Reanudar notificaciones" : "Pausar notificaciones")</button>
-                </div>
-            </div>
-        </section>
-
         <section class="dashboard-kpi-grid mb-4">
             <article class="dashboard-panel dashboard-metric-card" style="--accent:#22d3ee;">
                 <div class="dashboard-metric-label">Tasa de Aprobación (%)</div>
@@ -59,7 +32,13 @@
             </article>
 
             <article class="dashboard-panel dashboard-metric-card" style="--accent:#8b5cf6;">
-                <div class="dashboard-metric-label">Diagnósticos Realizados por IA</div>
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div class="dashboard-metric-label">Diagnósticos Realizados por IA</div>
+                    <button type="button" class="btn btn-sm btn-outline-light dashboard-chip-action" @onclick="OpenChartsModal">
+                        <i class="bi bi-graph-up"></i>
+                        <span>Ver gráficos</span>
+                    </button>
+                </div>
                 <div class="dashboard-metric-value" id="metric-diagnostics-count">@_animatedDiagnosticsCount</div>
                 <div class="dashboard-metric-subtitle">Resultados generados por el motor inteligente.</div>
             </article>
@@ -297,6 +276,12 @@
 
         if (firstRender && hubConnection == null)
         {
+            HeaderActions.Register(() =>
+            {
+                ToggleRealtime();
+                return Task.CompletedTask;
+            }, realtimePaused);
+
             try
             {
                 hubConnection = new HubConnectionBuilder()
@@ -391,6 +376,7 @@
     private void ToggleRealtime()
     {
         realtimePaused = !realtimePaused;
+        HeaderActions.UpdateState(realtimePaused);
     }
 
     private void RemoveToast(string t)
@@ -659,6 +645,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        HeaderActions.Unregister();
         if (hubConnection is not null)
             await hubConnection.DisposeAsync();
     }
