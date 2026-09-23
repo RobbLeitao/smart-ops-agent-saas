@@ -50,7 +50,14 @@
                             </div>
                             <div class="mt-1 d-flex align-items-center gap-2">
                                 <button class="notif-btn-analyze" @onclick:stopPropagation @onclick="() => Analyze(n.TransactionId, n.Id)">Analizar con IA</button>
-                                <button class="notif-link-read" @onclick:stopPropagation @onclick="() => MarkAsRead(n.Id)">Marcar leída</button>
+                                @if (n.IsRead)
+                                {
+                                    <span class="notif-read-label">Leída</span>
+                                }
+                                else
+                                {
+                                    <button class="notif-link-read" @onclick:stopPropagation @onclick="() => MarkAsRead(n.Id)">Marcar leída</button>
+                                }
                             </div>
                         </div>
                     </div>
