@@ -25,5 +25,18 @@
 .diagnostic-box h5{margin:0 0 8px 0;font-size:14px}
 .diagnostic-box ul{margin:0 0 8px 18px;padding:0}
 .btn{background:transparent;border:1px solid rgba(255,255,255,0.06);color:#cfe8ff;padding:8px 10px;border-radius:8px;cursor:pointer}
+.btn:disabled{opacity:0.55;cursor:not-allowed}
 .analyze{margin-right:8px}
+.analyze-error{color:var(--danger)}
+
+/* Small, drawer-sized variant of the branded Login/page-transition loader (same glow
+   animation), shown inline while the AI diagnostic call is in flight. */
+.drawer-loader{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 0;}
+.drawer-loader-logo{width:96px;height:96px;object-fit:contain;border-radius:14px;animation:drawerLoaderPulse 1.4s ease-in-out infinite;filter:drop-shadow(0 0 14px rgba(34,211,238,0.55));}
+.drawer-loader-text{margin-top:10px;color:#cbd5e1;font-size:0.8rem;letter-spacing:0.08em;text-transform:uppercase;}
+@keyframes drawerLoaderPulse {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 14px rgba(34, 211, 238, 0.55)); }
+    50% { transform: scale(1.08); filter: drop-shadow(0 0 22px rgba(139, 92, 246, 0.65)); }
+}
+
 @media (max-width:600px){.drawer{width:100%}}
