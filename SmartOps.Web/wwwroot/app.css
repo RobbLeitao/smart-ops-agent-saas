@@ -287,6 +287,10 @@ a, .btn-link {
         radial-gradient(circle at top left, rgba(34, 211, 238, 0.14), transparent 28%),
         radial-gradient(circle at top right, rgba(139, 92, 246, 0.12), transparent 24%),
         linear-gradient(180deg, #1a1f2c 0%, #11151d 100%);
+    /* Reduced from Bootstrap's default py-5 (3rem) so the page doesn't reserve more
+       vertical space than the content actually needs. */
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
 }
 
 .dashboard-panel {
