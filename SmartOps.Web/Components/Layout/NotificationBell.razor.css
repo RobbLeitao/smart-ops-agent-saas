@@ -1,5 +1,14 @@
 /* Dropdown panel: matches the dark/cyberpunk palette used by the drawers and
    dashboard panels (bg #1e2330, subtle slate border + cyan glow). */
+/* Transparent full-viewport backdrop used to detect outside clicks and close the
+   dropdown, same pattern as TransactionDetailDrawer's backdrop. */
+.notif-backdrop {
+    position: fixed;
+    inset: 0;
+    background: transparent;
+    z-index: 99997;
+}
+
 .notif-panel {
     background: linear-gradient(180deg, #1e2330 0%, #171c26 100%);
     border: 1px solid rgba(148, 163, 184, 0.16);
@@ -7,6 +16,11 @@
     box-shadow: 0 20px 60px rgba(2, 6, 23, 0.55), 0 0 24px rgba(34, 211, 238, 0.08);
     color: #e6eef8;
     overflow: hidden;
+}
+
+.notif-panel:focus,
+.notif-panel:focus-visible {
+    outline: none;
 }
 
 .notif-header {
@@ -80,16 +94,6 @@
     color: #64748b;
     font-size: 0.75rem;
     white-space: nowrap;
-}
-
-.notif-badge-new {
-    background: rgba(34, 211, 238, 0.14);
-    color: #22d3ee;
-    border: 1px solid rgba(34, 211, 238, 0.35);
-    border-radius: 999px;
-    padding: 2px 8px;
-    font-size: 0.7rem;
-    font-weight: 600;
 }
 
 .notif-btn-analyze {
