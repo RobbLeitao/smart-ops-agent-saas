@@ -62,6 +62,10 @@
 </aside>
 
 @code {
+    // Floor for how long the AI loader stays visible, even if the response arrives sooner
+    // than this (see Analyze()). Keeps the UI from "flashing" the loader imperceptibly.
+    private static readonly TimeSpan MinLoaderVisibleDuration = TimeSpan.FromMilliseconds(450);
+
     private TransactionDto? _dto;
     private string? _diagnostic;
     private string? _analyzeError;
@@ -153,6 +157,12 @@
         _diagnostic = null;
         StateHasChanged();
 
+        // Minimum time the loader stays visible even if the AI call resolves almost
+        // instantly (e.g. a very fast provider), so it never "flashes" imperceptibly.
+        // Awaited in the finally block so it applies on success, business error and
+        // exception paths alike, without adding latency to a slow real provider call.
+        var minLoaderVisibleTask = Task.Delay(MinLoaderVisibleDuration);
+
         try
         {
             var tx = await Db.Transactions.FindAsync(transactionId);
@@ -183,8 +193,10 @@
         }
         finally
         {
-            // Always clears the loader/disabled state, whether Analyze succeeded, failed,
-            // or hit the early "transaction not found" return above.
+            // Always waits out the minimum visible duration and clears the loader/disabled
+            // state, whether Analyze succeeded, failed, or hit the early "transaction not
+            // found" return above — never left stuck showing the loader.
+            await minLoaderVisibleTask;
             _isAnalyzing = false;
             await InvokeAsync(StateHasChanged);
         }
