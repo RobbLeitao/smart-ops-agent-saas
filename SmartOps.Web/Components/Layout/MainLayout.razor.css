@@ -3,6 +3,10 @@
     display: flex;
     /* Force column layout to avoid leftover reserved sidebar space */
     flex-direction: column !important;
+    /* The 100vh floor belongs here (header + main together), not on each page's own
+       wrapper — otherwise a min-vh-100 content wrapper stacks on top of the header's own
+       height and forces an unnecessary outer scrollbar even when content is short. */
+    min-height: 100vh;
 }
 
 main {
