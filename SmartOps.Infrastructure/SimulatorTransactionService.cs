@@ -130,7 +130,10 @@ public class SimulatorTransactionService : BackgroundService, ITransactionPublis
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Simulator transaction creation failed");
+            // Same guard as the logging calls above: when the host is shutting down (e.g. a disposed
+            // WebApplicationFactory in tests) the logger providers may already be disposed, and an exception
+            // escaping this timer callback would crash the whole process.
+            try { _logger.LogError(ex, "Simulator transaction creation failed"); } catch { }
         }
     }
 
