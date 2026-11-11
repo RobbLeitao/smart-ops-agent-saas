@@ -173,9 +173,6 @@ builder.Services.AddScoped<DataOpsPlugin>();
 builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticOrchestratorService>();
 builder.Services.AddScoped<SmartOps.Web.Services.DashboardHeaderActionsService>();
 
-// Register ITransactionAnalyzer abstraction and choose implementation based on configuration
-var openAiSection = builder.Configuration.GetSection("OpenAI");
-
 // Register TransactionNotifier which bridges publisher events to SignalR
 builder.Services.AddSingleton<SmartOps.Web.Services.TransactionNotifier>();
     builder.Services.AddSingleton<SmartOps.Web.Services.TransactionDrawerService>();
@@ -185,23 +182,6 @@ builder.Services.AddSignalR();
 // Enable verbose SignalR logging to surface InvalidDataException stack traces in Output window
 builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR", LogLevel.Debug);
 builder.Logging.AddFilter("Microsoft.AspNetCore.Http.Connections", LogLevel.Debug);
-var openAiKey = openAiSection.GetValue<string>("ApiKey");
-if (!string.IsNullOrWhiteSpace(openAiKey))
-{
-    // If an OpenAI key exists, use the orchestrator-backed analyzer which will use the Kernel/OpenAI path
-    builder.Services.AddScoped<SmartOps.Web.Services.ITransactionAnalyzer, SmartOps.Web.Services.OpenAITransactionAnalyzer>();
-}
-else
-{
-    // Register the real Azure OpenAI / OpenAI adapter and the Local simulator, and switch between them at
-    // runtime based on the Provider persisted from /integrations (SmartOps.Web.Services.ProviderSwitchingTransactionAnalyzer).
-    builder.Services.AddSingleton<SmartOps.Web.Services.IChatCompletionServiceFactory, SmartOps.Web.Services.SemanticKernelChatCompletionServiceFactory>();
-    builder.Services.AddScoped<SmartOps.Web.Services.DevFakeTransactionAnalyzer>();
-    builder.Services.AddScoped<SmartOps.Web.Services.AzureOpenAiDiagnosticEngine>();
-    builder.Services.AddScoped<SmartOps.Web.Services.ITransactionAnalyzer, SmartOps.Web.Services.ProviderSwitchingTransactionAnalyzer>();
-}
-
-// Proceed with building the app further below...
 
 // Register transaction publisher provider based on configuration (Simulator | External)
 var txSection = builder.Configuration.GetSection("TransactionSettings");

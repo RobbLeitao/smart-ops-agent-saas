@@ -6,21 +6,28 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
-using SmartOps.Core.Entities;
 using SmartOps.Infrastructure.Data;
 using SmartOps.Web.Services;
 using Xunit;
 
 namespace SmartOps.Web.Tests
 {
-    public sealed class AzureOpenAiDiagnosticEngineTests : IDisposable
+    /// <summary>
+    /// Provider selection and typed error handling of <see cref="AIOpsService"/> when a real provider
+    /// (OpenAI / Azure OpenAI) is configured in /integrations. Ported from the former
+    /// AzureOpenAiDiagnosticEngineTests (Path A), now exercised through the single AI engine.
+    /// </summary>
+    public sealed class AIOpsServiceErrorHandlingTests : IDisposable
     {
+        private const string Prompt = "Analiza la transacción\nErrorMessage: Card declined\n";
+
         private readonly DbConnection _connection;
         private readonly DbContextOptions<AppDbContext> _options;
 
-        public AzureOpenAiDiagnosticEngineTests()
+        public AIOpsServiceErrorHandlingTests()
         {
             _connection = new SqliteConnection("DataSource=:memory:");
             _connection.Open();
@@ -34,7 +41,7 @@ namespace SmartOps.Web.Tests
             db.Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS Settings (Key TEXT PRIMARY KEY, Value TEXT);");
         }
 
-        private AppDbContext CreateDbWithSettings(string provider, string apiKey, string modelId = "gpt-4o")
+        private AppDbContext CreateDbWithSettings(string provider, string apiKey, string modelId = "gpt-4o", string? endpoint = null)
         {
             var db = new AppDbContext(_options);
             db.Database.ExecuteSqlRaw(
@@ -43,41 +50,44 @@ namespace SmartOps.Web.Tests
                 "INSERT OR REPLACE INTO Settings (Key,Value) VALUES ('Integrations.ApiKey', {0});", apiKey);
             db.Database.ExecuteSqlRaw(
                 "INSERT OR REPLACE INTO Settings (Key,Value) VALUES ('Integrations.ModelId', {0});", modelId);
+            if (endpoint != null)
+            {
+                db.Database.ExecuteSqlRaw(
+                    "INSERT OR REPLACE INTO Settings (Key,Value) VALUES ('Integrations.Endpoint', {0});", endpoint);
+            }
             return db;
         }
 
-        private static Transaction SampleTransaction() => new()
+        // Application Kernel with its own (recording) chat service, to assert it is never used as a
+        // silent fallback when a real provider is configured in /integrations.
+        private static (Kernel Kernel, RecordingChatCompletionService Service) CreateDefaultKernel()
         {
-            Id = 1,
-            CustomerId = 1,
-            Amount = 49.00m,
-            Currency = "USD",
-            Status = "Failed",
-            GatewayReference = "TXN_ERR_502",
-            CardLast4 = "4242",
-            Provider = "Stripe",
-            ErrorMessage = "Card declined",
-            OccurredAt = DateTime.UtcNow
-        };
+            var service = new RecordingChatCompletionService("DEFAULT KERNEL RESPONSE");
+            var builder = Kernel.CreateBuilder();
+            builder.Services.AddSingleton<IChatCompletionService>(service);
+            return (builder.Build(), service);
+        }
 
         [Fact]
-        public async Task AnalyzeAsync_SuccessResponse_IsReturnedAsIs()
+        public async Task ExecutePromptAsync_SuccessResponse_IsReturnedAsIs()
         {
             using var db = CreateDbWithSettings("OpenAI", "sk-valid-key");
             var expected = "## 🔍 Razón del fallo\nEmisor rechazó la tarjeta\n\n## 🛠️ Acción recomendada para el operador\n- Contactar al banco.\n\n## 📨 Mensaje sugerido para el cliente\nEstimado cliente...";
-            var factory = new FakeChatCompletionServiceFactory(new SucceedingChatCompletionService(expected));
-            var engine = new AzureOpenAiDiagnosticEngine(factory, db);
+            var factory = new FakeChatCompletionServiceFactory(new RecordingChatCompletionService(expected));
+            var (kernel, defaultService) = CreateDefaultKernel();
+            var service = new AIOpsService(kernel, db, factory);
 
-            var result = await engine.AnalyzeAsync(SampleTransaction());
+            var result = await service.ExecutePromptAsync(Prompt);
 
             Assert.Equal(expected, result);
             Assert.Equal("OpenAI", factory.LastProvider);
             Assert.Equal("sk-valid-key", factory.LastApiKey);
             Assert.Equal("gpt-4o", factory.LastModelId);
+            Assert.False(defaultService.WasCalled);
         }
 
         [Fact]
-        public async Task AnalyzeAsync_AuthenticationFailure_ThrowsClearAiEngineException()
+        public async Task ExecutePromptAsync_AuthenticationFailure_ThrowsClearAiEngineException()
         {
             using var db = CreateDbWithSettings("OpenAI", "sk-invalid-key");
             var factory = new FakeChatCompletionServiceFactory(
@@ -85,53 +95,66 @@ namespace SmartOps.Web.Tests
                 {
                     StatusCode = System.Net.HttpStatusCode.Unauthorized
                 }));
-            var engine = new AzureOpenAiDiagnosticEngine(factory, db);
+            var (kernel, defaultService) = CreateDefaultKernel();
+            var service = new AIOpsService(kernel, db, factory);
 
-            var ex = await Assert.ThrowsAsync<AiEngineException>(() => engine.AnalyzeAsync(SampleTransaction()));
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
 
             Assert.Contains("API Key", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.IsType<HttpOperationException>(ex.InnerException);
+            // No silent fallback to the application Kernel / Local Simulator.
+            Assert.False(defaultService.WasCalled);
         }
 
         [Fact]
-        public async Task AnalyzeAsync_TimeoutOrGenericSdkError_ThrowsClearAiEngineException_WithoutCrashing()
+        public async Task ExecutePromptAsync_TimeoutOrGenericSdkError_ThrowsClearAiEngineException_WithoutCrashing()
         {
             using var db = CreateDbWithSettings("OpenAI", "sk-valid-key");
             var factory = new FakeChatCompletionServiceFactory(
                 new ThrowingChatCompletionService(new TaskCanceledException("The operation timed out.")));
-            var engine = new AzureOpenAiDiagnosticEngine(factory, db);
+            var (kernel, _) = CreateDefaultKernel();
+            var service = new AIOpsService(kernel, db, factory);
 
-            var ex = await Assert.ThrowsAsync<AiEngineException>(() => engine.AnalyzeAsync(SampleTransaction()));
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
 
             Assert.Contains("tiempo de espera", ex.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.IsType<TaskCanceledException>(ex.InnerException);
+            // Through Kernel.InvokePromptAsync, SK wraps the cancellation in KernelFunctionCanceledException
+            // (an OperationCanceledException) that keeps the original exception as its inner exception.
+            var canceled = Assert.IsAssignableFrom<OperationCanceledException>(ex.InnerException);
+            Assert.IsType<TaskCanceledException>(canceled.InnerException);
         }
 
         [Fact]
-        public async Task AnalyzeAsync_MissingApiKey_ThrowsClearAiEngineException_WithoutCallingSdk()
+        public async Task ExecutePromptAsync_MissingApiKey_ThrowsClearAiEngineException_WithoutCallingSdk()
         {
             using var db = CreateDbWithSettings("OpenAI", apiKey: string.Empty);
-            var factory = new FakeChatCompletionServiceFactory(new SucceedingChatCompletionService("should not be used"));
-            var engine = new AzureOpenAiDiagnosticEngine(factory, db);
+            var factory = new FakeChatCompletionServiceFactory(new RecordingChatCompletionService("should not be used"));
+            var (kernel, defaultService) = CreateDefaultKernel();
+            var service = new AIOpsService(kernel, db, factory);
 
-            var ex = await Assert.ThrowsAsync<AiEngineException>(() => engine.AnalyzeAsync(SampleTransaction()));
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
 
             Assert.Contains("API Key", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.False(factory.WasCalled);
+            Assert.False(defaultService.WasCalled);
         }
 
         public void Dispose() => _connection?.Dispose();
 
-        private sealed class FakeChatCompletionServiceFactory : IChatCompletionServiceFactory
+        internal sealed class FakeChatCompletionServiceFactory : IChatCompletionServiceFactory
         {
-            private readonly IChatCompletionService _service;
+            private readonly IChatCompletionService? _service;
+            private readonly Exception? _createException;
 
             public FakeChatCompletionServiceFactory(IChatCompletionService service) => _service = service;
+
+            public FakeChatCompletionServiceFactory(Exception createException) => _createException = createException;
 
             public bool WasCalled { get; private set; }
             public string? LastProvider { get; private set; }
             public string? LastApiKey { get; private set; }
             public string? LastModelId { get; private set; }
+            public string? LastEndpoint { get; private set; }
 
             public IChatCompletionService Create(string provider, string apiKey, string modelId, string? endpoint)
             {
@@ -139,12 +162,16 @@ namespace SmartOps.Web.Tests
                 LastProvider = provider;
                 LastApiKey = apiKey;
                 LastModelId = modelId;
-                return _service;
+                LastEndpoint = endpoint;
+                if (_createException != null) throw _createException;
+                return _service!;
             }
         }
 
-        private sealed class SucceedingChatCompletionService(string response) : IChatCompletionService
+        internal sealed class RecordingChatCompletionService(string response) : IChatCompletionService
         {
+            public bool WasCalled { get; private set; }
+
             public IReadOnlyDictionary<string, object?> Attributes { get; } = new Dictionary<string, object?>();
 
             public Task<IReadOnlyList<ChatMessageContent>> GetChatMessageContentsAsync(
@@ -153,6 +180,7 @@ namespace SmartOps.Web.Tests
                 Kernel? kernel = null,
                 CancellationToken cancellationToken = default)
             {
+                WasCalled = true;
                 IReadOnlyList<ChatMessageContent> messages = [new(AuthorRole.Assistant, response)];
                 return Task.FromResult(messages);
             }
@@ -163,12 +191,13 @@ namespace SmartOps.Web.Tests
                 Kernel? kernel = null,
                 [EnumeratorCancellation] CancellationToken cancellationToken = default)
             {
+                WasCalled = true;
                 await Task.CompletedTask;
                 yield break;
             }
         }
 
-        private sealed class ThrowingChatCompletionService(Exception toThrow) : IChatCompletionService
+        internal sealed class ThrowingChatCompletionService(Exception toThrow) : IChatCompletionService
         {
             public IReadOnlyDictionary<string, object?> Attributes { get; } = new Dictionary<string, object?>();
 
