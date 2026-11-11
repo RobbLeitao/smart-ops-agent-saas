@@ -78,5 +78,39 @@ namespace SmartOps.Web.Tests
             var responseBody = await response.Content.ReadAsStringAsync();
             Assert.Contains("## 🔍 Resumen del Error", responseBody);
         }
+
+        private sealed class FailingAIOpsService : SmartOps.Web.Services.IAIOpsService
+        {
+            public const string Message = "La API Key configurada en /integrations no es válida o no tiene permisos para este modelo. Verificá las credenciales.";
+
+            public Task<string> ExecutePromptAsync(string userPrompt)
+                => Task.FromException<string>(new SmartOps.Web.Services.AiEngineException(Message));
+        }
+
+        [Fact]
+        public async Task StripeWebhook_AiEngineException_Returns502WithOperatorMessage()
+        {
+            var factory = new WebApplicationFactory<Program>()
+                .WithWebHostBuilder(b =>
+                {
+                    b.ConfigureServices(services =>
+                    {
+                        services.AddScoped<SmartOps.Web.Services.IAIOpsService, FailingAIOpsService>();
+
+                        var descriptors = services.Where(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>) || d.ServiceType == typeof(AppDbContext)).ToList();
+                        foreach (var d in descriptors) services.Remove(d);
+
+                        services.AddDbContext<AppDbContext>(options =>
+                            options.UseInMemoryDatabase("DiagnosticsEndpoint502Db" + Guid.NewGuid()));
+                    });
+                });
+
+            using var client = factory.CreateClient();
+
+            var response = await client.PostAsync($"/api/webhooks/stripe/{Guid.NewGuid()}", new StringContent(string.Empty));
+
+            Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+            Assert.Equal(FailingAIOpsService.Message, await response.Content.ReadAsStringAsync());
+        }
     }
 }

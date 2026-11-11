@@ -35,7 +35,7 @@
             <div class="mb-4">
                 <div class="text-cyan-300 small mb-3">Proveedor de IA</div>
                 <div class="row g-3">
-                    <div class="col-lg-6">
+                    <div class="col-lg-4">
                         <button class="@ProviderCardClass(ModelProvider.Local)" @onclick="() => SelectProvider(ModelProvider.Local)">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
@@ -46,12 +46,23 @@
                             </div>
                         </button>
                     </div>
-                    <div class="col-lg-6">
+                    <div class="col-lg-4">
                         <button class="@ProviderCardClass(ModelProvider.OpenAI)" @onclick="() => SelectProvider(ModelProvider.OpenAI)">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
-                                    <div class="text-slate-100 fw-semibold">OpenAI API / Azure OpenAI</div>
+                                    <div class="text-slate-100 fw-semibold">OpenAI API</div>
                                     <div class="text-slate-400 small">Conecta el modelo real para producción</div>
+                                </div>
+                                <span class="badge rounded-pill" style="background:#13233a;color:#67e8f9;">Producción</span>
+                            </div>
+                        </button>
+                    </div>
+                    <div class="col-lg-4">
+                        <button class="@ProviderCardClass(ModelProvider.AzureOpenAI)" @onclick="() => SelectProvider(ModelProvider.AzureOpenAI)">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="text-slate-100 fw-semibold">Azure OpenAI</div>
+                                    <div class="text-slate-400 small">Deployment propio en Azure AI</div>
                                 </div>
                                 <span class="badge rounded-pill" style="background:#13233a;color:#67e8f9;">Producción</span>
                             </div>
@@ -60,7 +71,7 @@
                 </div>
             </div>
 
-            @if (SelectedProvider == ModelProvider.OpenAI)
+            @if (IsRealProvider)
             {
                 <div class="mb-4 p-4 rounded-4" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
                     <div class="text-cyan-300 small mb-3">Credenciales</div>
@@ -79,13 +90,24 @@
                             }
                         </div>
                         <div class="col-lg-6">
-                            <label class="form-label text-slate-200">Model ID <span class="text-danger">*</span></label>
+                            <label class="form-label text-slate-200">@(SelectedProvider == ModelProvider.AzureOpenAI ? "Deployment / Model ID" : "Model ID") <span class="text-danger">*</span></label>
                             <input class="form-control bg-[#11151b] border-0 text-slate-200 @(ShowValidationErrors && string.IsNullOrWhiteSpace(ModelId) ? "is-invalid" : string.Empty)" @bind="ModelId" placeholder="gpt-4o" />
                             @if (ShowValidationErrors && string.IsNullOrWhiteSpace(ModelId))
                             {
                                 <div class="text-danger small mt-1">El Model ID es obligatorio.</div>
                             }
                         </div>
+                        @if (SelectedProvider == ModelProvider.AzureOpenAI)
+                        {
+                            <div class="col-12">
+                                <label class="form-label text-slate-200">Endpoint <span class="text-danger">*</span></label>
+                                <input class="form-control bg-[#11151b] border-0 text-slate-200 @(ShowValidationErrors && string.IsNullOrWhiteSpace(Endpoint) ? "is-invalid" : string.Empty)" @bind="Endpoint" placeholder="https://mi-recurso.openai.azure.com/" />
+                                @if (ShowValidationErrors && string.IsNullOrWhiteSpace(Endpoint))
+                                {
+                                    <div class="text-danger small mt-1">El endpoint de Azure OpenAI es obligatorio.</div>
+                                }
+                            </div>
+                        }
                     </div>
                 </div>
             }
@@ -112,10 +134,12 @@
                 </div>
             }
 
-            @if (ShowValidationErrors && SelectedProvider == ModelProvider.OpenAI && (string.IsNullOrWhiteSpace(ApiKey) || string.IsNullOrWhiteSpace(ModelId)))
+            @if (ShowValidationErrors && HasMissingRequiredFields)
             {
                 <div class="mt-4 alert alert-danger">
-                    Completá API Key y Model ID antes de guardar la configuración.
+                    @(SelectedProvider == ModelProvider.AzureOpenAI
+                        ? "Completá API Key, Deployment / Model ID y Endpoint antes de guardar la configuración."
+                        : "Completá API Key y Model ID antes de guardar la configuración.")
                 </div>
             }
         </div>
@@ -123,15 +147,27 @@
 </div>
 
 @code {
+    // Persisted as-is in Settings["Integrations.Provider"]; AIOpsService treats "OpenAI" and any value
+    // containing "azure" as real providers, anything else as the Local Simulator.
     private enum ModelProvider
     {
         Local,
-        OpenAI
+        OpenAI,
+        AzureOpenAI
     }
 
     private ModelProvider SelectedProvider = ModelProvider.Local;
     private string ApiKey = string.Empty;
     private string ModelId = "gpt-4o";
+    private string Endpoint = string.Empty;
+
+    private bool IsRealProvider => SelectedProvider is ModelProvider.OpenAI or ModelProvider.AzureOpenAI;
+
+    private bool HasMissingRequiredFields =>
+        IsRealProvider &&
+        (string.IsNullOrWhiteSpace(ApiKey)
+         || string.IsNullOrWhiteSpace(ModelId)
+         || (SelectedProvider == ModelProvider.AzureOpenAI && string.IsNullOrWhiteSpace(Endpoint)));
     private bool ShowApiKey;
     private bool IsSaving;
     private bool ShowToast;
@@ -174,6 +210,9 @@
 
             cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.ModelId"; cmd.Parameters.Add(p);
             val = cmd.ExecuteScalar() as string; if (!string.IsNullOrWhiteSpace(val)) ModelId = val;
+
+            cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.Endpoint"; cmd.Parameters.Add(p);
+            val = cmd.ExecuteScalar() as string; if (!string.IsNullOrWhiteSpace(val)) Endpoint = val;
         }
         catch
         {
@@ -185,8 +224,7 @@
     {
         ShowValidationErrors = true;
 
-        if (SelectedProvider == ModelProvider.OpenAI &&
-            (string.IsNullOrWhiteSpace(ApiKey) || string.IsNullOrWhiteSpace(ModelId)))
+        if (HasMissingRequiredFields)
         {
             StateHasChanged();
             return;
@@ -210,6 +248,7 @@
             pK.Value = "Integrations.Provider"; pV.Value = SelectedProvider.ToString(); cmd.ExecuteNonQuery();
             pK.Value = "Integrations.ApiKey"; pV.Value = ApiKey ?? string.Empty; cmd.ExecuteNonQuery();
             pK.Value = "Integrations.ModelId"; pV.Value = ModelId ?? string.Empty; cmd.ExecuteNonQuery();
+            pK.Value = "Integrations.Endpoint"; pV.Value = Endpoint ?? string.Empty; cmd.ExecuteNonQuery();
 
             tran.Commit();
             ShowToast = true;

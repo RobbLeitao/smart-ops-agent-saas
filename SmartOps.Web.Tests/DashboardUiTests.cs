@@ -39,6 +39,7 @@ namespace SmartOps.Web.Tests
             ctx.Services.AddSingleton<SmartOps.Web.Services.IAIOpsService>(fake);
             ctx.Services.AddSingleton<SmartOps.Web.Services.DiagnosticOrchestratorService>();
             ctx.Services.AddSingleton(drawerService);
+            ctx.Services.AddSingleton<SmartOps.Web.Services.DashboardHeaderActionsService>();
             ctx.Services.AddSingleton<AuthenticationStateProvider>(new TestAuthenticationStateProvider());
 
             var comp = ctx.Render<SmartOps.Web.Components.Pages.Dashboard>();

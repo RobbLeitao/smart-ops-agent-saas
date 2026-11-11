@@ -164,15 +164,14 @@ builder.Services.AddSingleton<Kernel>(sp =>
     return builtKernel;
 });
 
-// Register AIOpsService, DiagnosticOrchestratorService and plugin in DI
+// Register AIOpsService, DiagnosticOrchestratorService and plugin in DI.
+// The factory builds the OpenAI / Azure OpenAI connector from the provider persisted in /integrations.
+builder.Services.AddSingleton<SmartOps.Web.Services.IChatCompletionServiceFactory, SmartOps.Web.Services.SemanticKernelChatCompletionServiceFactory>();
 builder.Services.AddScoped<SmartOps.Web.Services.AIOpsService>();
 builder.Services.AddScoped<SmartOps.Web.Services.IAIOpsService>(sp => sp.GetRequiredService<SmartOps.Web.Services.AIOpsService>());
 builder.Services.AddScoped<DataOpsPlugin>();
 builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticOrchestratorService>();
 builder.Services.AddScoped<SmartOps.Web.Services.DashboardHeaderActionsService>();
-
-// Register ITransactionAnalyzer abstraction and choose implementation based on configuration
-var openAiSection = builder.Configuration.GetSection("OpenAI");
 
 // Register TransactionNotifier which bridges publisher events to SignalR
 builder.Services.AddSingleton<SmartOps.Web.Services.TransactionNotifier>();
@@ -183,23 +182,6 @@ builder.Services.AddSignalR();
 // Enable verbose SignalR logging to surface InvalidDataException stack traces in Output window
 builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR", LogLevel.Debug);
 builder.Logging.AddFilter("Microsoft.AspNetCore.Http.Connections", LogLevel.Debug);
-var openAiKey = openAiSection.GetValue<string>("ApiKey");
-if (!string.IsNullOrWhiteSpace(openAiKey))
-{
-    // If an OpenAI key exists, use the orchestrator-backed analyzer which will use the Kernel/OpenAI path
-    builder.Services.AddScoped<SmartOps.Web.Services.ITransactionAnalyzer, SmartOps.Web.Services.OpenAITransactionAnalyzer>();
-}
-else
-{
-    // Register the real Azure OpenAI / OpenAI adapter and the Local simulator, and switch between them at
-    // runtime based on the Provider persisted from /integrations (SmartOps.Web.Services.ProviderSwitchingTransactionAnalyzer).
-    builder.Services.AddSingleton<SmartOps.Web.Services.IChatCompletionServiceFactory, SmartOps.Web.Services.SemanticKernelChatCompletionServiceFactory>();
-    builder.Services.AddScoped<SmartOps.Web.Services.DevFakeTransactionAnalyzer>();
-    builder.Services.AddScoped<SmartOps.Web.Services.AzureOpenAiDiagnosticEngine>();
-    builder.Services.AddScoped<SmartOps.Web.Services.ITransactionAnalyzer, SmartOps.Web.Services.ProviderSwitchingTransactionAnalyzer>();
-}
-
-// Proceed with building the app further below...
 
 // Register transaction publisher provider based on configuration (Simulator | External)
 var txSection = builder.Configuration.GetSection("TransactionSettings");
@@ -600,7 +582,16 @@ app.MapPost("/api/webhooks/stripe/{transactionId?}", async (HttpRequest req, str
         return Results.BadRequest("transactionId not provided in URL or request body");
     }
 
-    var result = await orchestrator.RunDiagnosticAsync(txId.Value);
+    string result;
+    try
+    {
+        result = await orchestrator.RunDiagnosticAsync(txId.Value);
+    }
+    catch (SmartOps.Web.Services.AiEngineException aiEx)
+    {
+        // The configured AI provider (upstream) failed: 502 Bad Gateway with the operator-facing message.
+        return Results.Text(aiEx.Message, "text/plain; charset=utf-8", statusCode: StatusCodes.Status502BadGateway);
+    }
 
     if (string.IsNullOrWhiteSpace(result) || result.Contains("NotFound", StringComparison.OrdinalIgnoreCase) || result.Contains("No failed", StringComparison.OrdinalIgnoreCase))
     {

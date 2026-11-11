@@ -41,6 +41,11 @@ public sealed class DiagnosticOrchestratorService
 
             return response;
         }
+        catch (AiEngineException)
+        {
+            // Operator-facing provider error: propagate to the caller (UI / webhook) without persisting a Diagnostic.
+            throw;
+        }
         catch (Exception)
         {
             return "## 🔍 Resumen del Error\nNo se pudo ejecutar el proveedor de IA. Esto es una respuesta simulada para pruebas de UI.\n\n## 🛠️ Acciones Recomendadas para el Operador\n- Verificar configuración de AI (appsettings o variables de entorno).\n\n## 📨 Mensaje sugerido para el cliente\nEstimado cliente, estamos investigando su pago y le informaremos pronto.";
@@ -82,6 +87,11 @@ public sealed class DiagnosticOrchestratorService
             }
 
             return response;
+        }
+        catch (AiEngineException)
+        {
+            // Operator-facing provider error: propagate to the caller (UI / webhook) without persisting a Diagnostic.
+            throw;
         }
         catch (Exception)
         {

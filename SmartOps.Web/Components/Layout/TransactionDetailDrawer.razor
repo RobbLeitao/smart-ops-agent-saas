@@ -194,6 +194,12 @@
                 _diagnostic = markdown;
             }
         }
+        catch (AiEngineException aiEx)
+        {
+            // Operator-facing provider error (invalid API key, rate limit, timeout, ...).
+            Logger?.LogWarning(aiEx, "AI provider error analyzing transaction {Id}", transactionId);
+            _analyzeError = $"⚠️ {aiEx.Message}";
+        }
         catch (Exception ex)
         {
             Logger?.LogError(ex, "Analyze failed for transaction {Id}", transactionId);
