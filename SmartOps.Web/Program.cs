@@ -164,7 +164,9 @@ builder.Services.AddSingleton<Kernel>(sp =>
     return builtKernel;
 });
 
-// Register AIOpsService, DiagnosticOrchestratorService and plugin in DI
+// Register AIOpsService, DiagnosticOrchestratorService and plugin in DI.
+// The factory builds the OpenAI / Azure OpenAI connector from the provider persisted in /integrations.
+builder.Services.AddSingleton<SmartOps.Web.Services.IChatCompletionServiceFactory, SmartOps.Web.Services.SemanticKernelChatCompletionServiceFactory>();
 builder.Services.AddScoped<SmartOps.Web.Services.AIOpsService>();
 builder.Services.AddScoped<SmartOps.Web.Services.IAIOpsService>(sp => sp.GetRequiredService<SmartOps.Web.Services.AIOpsService>());
 builder.Services.AddScoped<DataOpsPlugin>();
@@ -600,7 +602,16 @@ app.MapPost("/api/webhooks/stripe/{transactionId?}", async (HttpRequest req, str
         return Results.BadRequest("transactionId not provided in URL or request body");
     }
 
-    var result = await orchestrator.RunDiagnosticAsync(txId.Value);
+    string result;
+    try
+    {
+        result = await orchestrator.RunDiagnosticAsync(txId.Value);
+    }
+    catch (SmartOps.Web.Services.AiEngineException aiEx)
+    {
+        // The configured AI provider (upstream) failed: 502 Bad Gateway with the operator-facing message.
+        return Results.Text(aiEx.Message, "text/plain; charset=utf-8", statusCode: StatusCodes.Status502BadGateway);
+    }
 
     if (string.IsNullOrWhiteSpace(result) || result.Contains("NotFound", StringComparison.OrdinalIgnoreCase) || result.Contains("No failed", StringComparison.OrdinalIgnoreCase))
     {

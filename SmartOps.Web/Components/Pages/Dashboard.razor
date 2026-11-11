@@ -523,6 +523,12 @@
                     await LoadMetricsAsync();
                     chartsDirty = true;
                 }
+                catch (SmartOps.Web.Services.AiEngineException aiEx)
+                {
+                    // Operator-facing provider error (invalid API key, rate limit, timeout, ...).
+                    diagnostics[id] = $"⚠️ {aiEx.Message}";
+                    technicalDetails[id] = aiEx.ToString();
+                }
                 catch (Exception exInner)
                 {
                     diagnostics[id] = "⚠️ No logramos procesar el diagnóstico inteligente en este momento. Por favor, reintentá en unos instantes.";
