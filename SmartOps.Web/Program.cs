@@ -169,6 +169,7 @@ builder.Services.AddScoped<SmartOps.Web.Services.AIOpsService>();
 builder.Services.AddScoped<SmartOps.Web.Services.IAIOpsService>(sp => sp.GetRequiredService<SmartOps.Web.Services.AIOpsService>());
 builder.Services.AddScoped<DataOpsPlugin>();
 builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticOrchestratorService>();
+builder.Services.AddScoped<SmartOps.Web.Services.DashboardHeaderActionsService>();
 
 // Register ITransactionAnalyzer abstraction and choose implementation based on configuration
 var openAiSection = builder.Configuration.GetSection("OpenAI");

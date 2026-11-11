@@ -17,9 +17,9 @@
       <div class="status-badge @(IsError ? "error" : "success")">@(_dto?.Status ?? "—")</div>
     </div>
     <div class="header-actions">
-      @if (IsError && string.IsNullOrWhiteSpace(_diagnostic) && !_isAnalyzing)
+      @if (IsError && string.IsNullOrWhiteSpace(_diagnostic))
       {
-        <button class="btn analyze" @onclick="Analyze">Analizar con IA</button>
+        <button class="btn analyze" @onclick="Analyze" disabled="@_isAnalyzing">Analizar con IA</button>
       }
       <button class="btn close" @onclick="Close">✕</button>
     </div>
@@ -37,9 +37,20 @@
 
       <h4>Diagnóstico IA</h4>
       <div class="diagnostic-box">
-        @if (!string.IsNullOrWhiteSpace(_diagnostic))
+        @if (_isAnalyzing)
+        {
+          <div class="drawer-loader @(_loaderClosing ? "closing" : "")">
+            <img src="/images/logo.png" alt="SmartOps" class="drawer-loader-logo" />
+            <div class="drawer-loader-text">Analizando con IA...</div>
+          </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_diagnostic))
         {
           @((MarkupString)RenderMarkdown(_diagnostic))
+        }
+        else if (!string.IsNullOrWhiteSpace(_analyzeError))
+        {
+          <p class="muted analyze-error">@_analyzeError</p>
         }
         else
         {
@@ -51,9 +62,20 @@
 </aside>
 
 @code {
+    // Floor for how long the AI loader stays visible, even if the response arrives sooner
+    // than this (see Analyze()). Keeps the UI from "flashing" the loader imperceptibly.
+    private static readonly TimeSpan MinLoaderVisibleDuration = TimeSpan.FromMilliseconds(550);
+
+    // Must match the CSS "drawerLoaderFadeOut" animation duration, so the element stays
+    // mounted (with the "closing" class applied) exactly long enough for the fade-out to
+    // play before it's actually removed from the DOM.
+    private static readonly TimeSpan LoaderFadeOutDuration = TimeSpan.FromMilliseconds(220);
+
     private TransactionDto? _dto;
     private string? _diagnostic;
+    private string? _analyzeError;
     private bool _isAnalyzing;
+    private bool _loaderClosing;
     private bool IsOpen => _dto != null;
     private bool IsError => _dto?.Status?.ToLowerInvariant().Contains("fail") ?? false;
     private ElementReference drawerRef;
@@ -86,7 +108,9 @@
         Logger?.LogInformation("TransactionDetailDrawer.OnDrawerChange invoked. NewId={Id}", dto?.Id.ToString() ?? "null");
         _dto = dto;
         _diagnostic = null;
+        _analyzeError = null;
         _isAnalyzing = false;
+        _loaderClosing = false;
         InvokeAsync(StateHasChanged);
 
         if (dto != null && dto.Status?.ToLowerInvariant().Contains("fail") == true)
@@ -131,19 +155,28 @@
 
     private async Task Analyze()
     {
-        if (_dto == null) return;
+        // Guard against double-click / duplicate calls while a request is already in flight.
+        if (_dto == null || _isAnalyzing) return;
 
         var transactionId = _dto.Id;
         _isAnalyzing = true;
-        _diagnostic = "Generando diagnóstico...";
+        _loaderClosing = false;
+        _analyzeError = null;
+        _diagnostic = null;
         StateHasChanged();
+
+        // Minimum time the loader stays visible even if the AI call resolves almost
+        // instantly (e.g. a very fast provider), so it never "flashes" imperceptibly.
+        // Awaited in the finally block so it applies on success, business error and
+        // exception paths alike, without adding latency to a slow real provider call.
+        var minLoaderVisibleTask = Task.Delay(MinLoaderVisibleDuration);
 
         try
         {
             var tx = await Db.Transactions.FindAsync(transactionId);
             if (tx == null)
             {
-                _diagnostic = "No se encontró la transacción.";
+                _analyzeError = "No se encontró la transacción.";
                 return;
             }
 
@@ -164,11 +197,21 @@
         catch (Exception ex)
         {
             Logger?.LogError(ex, "Analyze failed for transaction {Id}", transactionId);
-            _diagnostic = "⚠️ No logramos procesar el diagnóstico inteligente en este momento. Por favor, reintentá en unos instantes.";
+            _analyzeError = "⚠️ No logramos procesar el diagnóstico inteligente en este momento. Por favor, reintentá en unos instantes.";
         }
         finally
         {
+            // Always waits out the minimum visible duration, then plays the fade-out
+            // animation (via the "closing" CSS class) before actually hiding the loader
+            // and clearing the disabled state — whether Analyze succeeded, failed, or hit
+            // the early "transaction not found" return above — never left stuck showing
+            // the loader, and never swapped out abruptly.
+            await minLoaderVisibleTask;
+            _loaderClosing = true;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(LoaderFadeOutDuration);
             _isAnalyzing = false;
+            _loaderClosing = false;
             await InvokeAsync(StateHasChanged);
         }
     }
