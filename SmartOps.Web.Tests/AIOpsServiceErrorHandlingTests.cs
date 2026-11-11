@@ -139,6 +139,182 @@ namespace SmartOps.Web.Tests
             Assert.False(defaultService.WasCalled);
         }
 
+        private static HttpOperationException HttpError(System.Net.HttpStatusCode status)
+            => new($"HTTP {(int)status}", null) { StatusCode = status };
+
+        [Fact]
+        public async Task ExecutePromptAsync_Forbidden_ThrowsInvalidCredentialsMessage()
+        {
+            using var db = CreateDbWithSettings("OpenAI", "sk-no-permissions");
+            var factory = new FakeChatCompletionServiceFactory(
+                new ThrowingChatCompletionService(HttpError(System.Net.HttpStatusCode.Forbidden)));
+            var service = new AIOpsService(CreateDefaultKernel().Kernel, db, factory);
+
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
+
+            Assert.Contains("API Key", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("permisos", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task ExecutePromptAsync_RateLimited_ThrowsRateLimitMessage()
+        {
+            using var db = CreateDbWithSettings("OpenAI", "sk-valid-key");
+            var factory = new FakeChatCompletionServiceFactory(
+                new ThrowingChatCompletionService(HttpError(System.Net.HttpStatusCode.TooManyRequests)));
+            var service = new AIOpsService(CreateDefaultKernel().Kernel, db, factory);
+
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
+
+            Assert.Contains("rate limit", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.IsType<HttpOperationException>(ex.InnerException);
+        }
+
+        [Theory]
+        [InlineData(System.Net.HttpStatusCode.RequestTimeout)]
+        [InlineData(System.Net.HttpStatusCode.GatewayTimeout)]
+        public async Task ExecutePromptAsync_HttpTimeoutStatus_ThrowsTimeoutMessage(System.Net.HttpStatusCode status)
+        {
+            using var db = CreateDbWithSettings("OpenAI", "sk-valid-key");
+            var factory = new FakeChatCompletionServiceFactory(new ThrowingChatCompletionService(HttpError(status)));
+            var service = new AIOpsService(CreateDefaultKernel().Kernel, db, factory);
+
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
+
+            Assert.Contains("tiempo de espera", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task ExecutePromptAsync_OtherHttpError_IncludesStatusCode()
+        {
+            using var db = CreateDbWithSettings("OpenAI", "sk-valid-key");
+            var factory = new FakeChatCompletionServiceFactory(
+                new ThrowingChatCompletionService(HttpError(System.Net.HttpStatusCode.InternalServerError)));
+            var service = new AIOpsService(CreateDefaultKernel().Kernel, db, factory);
+
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
+
+            Assert.Contains("(500)", ex.Message);
+        }
+
+        [Fact]
+        public async Task ExecutePromptAsync_GenericSdkError_ThrowsUnexpectedErrorMessage()
+        {
+            using var db = CreateDbWithSettings("OpenAI", "sk-valid-key");
+            var factory = new FakeChatCompletionServiceFactory(
+                new ThrowingChatCompletionService(new InvalidOperationException("boom")));
+            var service = new AIOpsService(CreateDefaultKernel().Kernel, db, factory);
+
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
+
+            Assert.Contains("error inesperado", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("boom", ex.Message);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("   ")]
+        public async Task ExecutePromptAsync_EmptyResponse_ThrowsNoContentMessage(string emptyResponse)
+        {
+            using var db = CreateDbWithSettings("OpenAI", "sk-valid-key");
+            var factory = new FakeChatCompletionServiceFactory(new RecordingChatCompletionService(emptyResponse));
+            var service = new AIOpsService(CreateDefaultKernel().Kernel, db, factory);
+
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
+
+            Assert.Contains("no devolvió contenido", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task ExecutePromptAsync_ConnectorInitializationFails_ThrowsInitializationMessage()
+        {
+            using var db = CreateDbWithSettings("OpenAI", "sk-valid-key");
+            var factory = new FakeChatCompletionServiceFactory(new ArgumentException("bad model"));
+            var service = new AIOpsService(CreateDefaultKernel().Kernel, db, factory);
+
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
+
+            Assert.Contains("No se pudo inicializar el conector", ex.Message);
+            Assert.IsType<ArgumentException>(ex.InnerException);
+        }
+
+        [Fact]
+        public async Task ExecutePromptAsync_AzureProvider_PassesEndpointAndDeploymentToFactory()
+        {
+            using var db = CreateDbWithSettings("AzureOpenAI", "azure-key", "my-deployment", "https://contoso.openai.azure.com/");
+            var factory = new FakeChatCompletionServiceFactory(new RecordingChatCompletionService("AZURE RESPONSE"));
+            var (kernel, defaultService) = CreateDefaultKernel();
+            var service = new AIOpsService(kernel, db, factory);
+
+            var result = await service.ExecutePromptAsync(Prompt);
+
+            Assert.Equal("AZURE RESPONSE", result);
+            Assert.Equal("AzureOpenAI", factory.LastProvider);
+            Assert.Equal("azure-key", factory.LastApiKey);
+            Assert.Equal("my-deployment", factory.LastModelId);
+            Assert.Equal("https://contoso.openai.azure.com/", factory.LastEndpoint);
+            Assert.False(defaultService.WasCalled);
+        }
+
+        [Fact]
+        public async Task ExecutePromptAsync_AzureWithoutEndpoint_RealFactory_ThrowsInitializationMessage()
+        {
+            // Uses the production factory: it rejects Azure without endpoint before any network call.
+            using var db = CreateDbWithSettings("AzureOpenAI", "azure-key", "my-deployment");
+            var service = new AIOpsService(CreateDefaultKernel().Kernel, db, new SemanticKernelChatCompletionServiceFactory());
+
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
+
+            Assert.Contains("endpoint", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.IsType<ArgumentException>(ex.InnerException);
+        }
+
+        [Fact]
+        public async Task ExecutePromptAsync_LocalProvider_UsesDefaultKernel_AndIgnoresPersistedKey()
+        {
+            using var db = CreateDbWithSettings("Local", "sk-leftover-key");
+            var factory = new FakeChatCompletionServiceFactory(new RecordingChatCompletionService("should not be used"));
+            var (kernel, defaultService) = CreateDefaultKernel();
+            var service = new AIOpsService(kernel, db, factory);
+
+            var result = await service.ExecutePromptAsync(Prompt);
+
+            Assert.Equal("DEFAULT KERNEL RESPONSE", result);
+            Assert.True(defaultService.WasCalled);
+            Assert.False(factory.WasCalled);
+        }
+
+        [Fact]
+        public async Task ExecutePromptAsync_DefaultKernelProviderFails_ThrowsAiEngineException()
+        {
+            // Local mode with an environment-configured provider on the application Kernel that fails.
+            using var db = CreateDbWithSettings("Local", string.Empty);
+            var builder = Kernel.CreateBuilder();
+            builder.Services.AddSingleton<IChatCompletionService>(
+                new ThrowingChatCompletionService(HttpError(System.Net.HttpStatusCode.Unauthorized)));
+            var service = new AIOpsService(builder.Build(), db, new FakeChatCompletionServiceFactory(new RecordingChatCompletionService("unused")));
+
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
+
+            Assert.Contains("API Key", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Theory]
+        [InlineData("Card declined", "Emisor rechazó la tarjeta")]
+        [InlineData("Invalid CVC", "Código CVC inválido")]
+        [InlineData("Insufficient funds", "Fondos insuficientes")]
+        [InlineData("Suspected fraud", "Posible fraude detectado")]
+        public async Task ExecutePromptAsync_LocalSimulator_ReturnsHeuristicDiagnosis(string errorMessage, string expectedReason)
+        {
+            // No db (unconfigured) and an empty Kernel: Local Simulator.
+            var service = new AIOpsService(Kernel.CreateBuilder().Build());
+
+            var result = await service.ExecutePromptAsync($"Contexto\nErrorMessage: {errorMessage}\n");
+
+            Assert.Contains(expectedReason, result);
+            Assert.Contains("## 📨 Mensaje sugerido para el cliente", result);
+        }
+
         public void Dispose() => _connection?.Dispose();
 
         internal sealed class FakeChatCompletionServiceFactory : IChatCompletionServiceFactory
