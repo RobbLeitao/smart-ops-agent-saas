@@ -200,6 +200,7 @@
     private bool showChartsModal;
     private string? currentUserId;
     private int SuccessRatePercent;
+    private int TotalTransactionsCount;
     private List<(string Reason, int Count)> FailureReasons = new();
     private readonly Dictionary<int, bool> processing = new();
     private readonly Dictionary<int, string> diagnostics = new();
@@ -312,19 +313,19 @@
                         else
                             gridTransactions.Insert(0, tx);
 
-                        if (string.Equals(tx.Status, "Failed", StringComparison.OrdinalIgnoreCase))
+                        TotalTransactionsCount++;
+                        if (TransactionStatus.IsFailed(tx.Status))
                         {
                             FailedTransactionsCount++;
                             FailedChartCount++;
                         }
-                        else
+                        else if (TransactionStatus.IsApproved(tx.Status))
                         {
                             ApprovedTransactionsCount++;
                             ApprovedChartCount++;
                         }
 
-                        var total = ApprovedTransactionsCount + FailedTransactionsCount;
-                        SuccessRatePercent = total == 0 ? 0 : (int)Math.Round(ApprovedTransactionsCount * 100.0 / total);
+                        SuccessRatePercent = SmartOps.Web.Services.DashboardMetricsHelper.SuccessRate(ApprovedTransactionsCount, TotalTransactionsCount);
                         metricsDirty = true;
 
                         if (!string.IsNullOrWhiteSpace(tx.ErrorMessage))
@@ -424,16 +425,17 @@
         var diagnosticsData = await Db.Diagnostics.ToListAsync();
         var transactions = await Db.Transactions.ToListAsync();
         var feedback = await Db.DiagnosticFeedback.ToListAsync();
-        var metrics = SmartOps.Web.Services.DashboardMetricsHelper.Build(transactions, feedback, diagnosticsData, showAllRecords, currentUserId);
+        var metrics = SmartOps.Web.Services.DashboardMetricsHelper.Build(transactions, feedback, diagnosticsData);
 
-        FailedTransactionsCount = metrics.FailedTransactionsCount;
+        FailedTransactionsCount = metrics.FailedCount;
         DiagnosticsCount = metrics.DiagnosticsCount;
-        ApprovedTransactionsCount = metrics.ApprovedTransactionsCount;
+        ApprovedTransactionsCount = metrics.ApprovedCount;
+        TotalTransactionsCount = metrics.TotalCount;
         SuccessRatePercent = metrics.SuccessRatePercent;
         UsefulPercent = metrics.UsefulPercent;
-        FailureReasons = metrics.FailureReasons.ToList();
-        FailedChartCount = metrics.FailedChartCount;
-        ApprovedChartCount = metrics.ApprovedChartCount;
+        FailureReasons = metrics.FailureReasons.Select(r => (r.Reason, r.Count)).ToList();
+        FailedChartCount = metrics.FailedCount;
+        ApprovedChartCount = metrics.ApprovedCount;
         metricsDirty = true;
     }
 
