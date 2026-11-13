@@ -301,6 +301,9 @@
 
 /* Sin scroll vertical propio: la página scrollea y la tabla pagina. Horizontal solo si no entra. */
 .dash-table-scroll {
+    /* position: relative para que los .visually-hidden (absolute) de la tabla queden dentro del
+       contenedor con scroll y no ensanchen la página en pantallas angostas. */
+    position: relative;
     overflow-x: auto;
     overflow-y: visible;
     border-top: 1px solid var(--border);
