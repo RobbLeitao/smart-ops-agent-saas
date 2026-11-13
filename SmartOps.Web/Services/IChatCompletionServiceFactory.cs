@@ -12,7 +12,8 @@ namespace SmartOps.Web.Services
         /// <param name="provider">"OpenAI" or "AzureOpenAI" (case-insensitive).</param>
         /// <param name="apiKey">API key persisted in /integrations.</param>
         /// <param name="modelId">Model/deployment id persisted in /integrations (e.g. "gpt-4o").</param>
-        /// <param name="endpoint">Azure OpenAI endpoint. Ignored for plain OpenAI.</param>
+        /// <param name="endpoint">Azure OpenAI endpoint (required for Azure). For "OpenAI", optional custom
+        /// OpenAI-compatible base URL (e.g. https://api.groq.com/openai/v1); null/empty uses the official endpoint.</param>
         IChatCompletionService Create(string provider, string apiKey, string modelId, string? endpoint);
     }
 }
