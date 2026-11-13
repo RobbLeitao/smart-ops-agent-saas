@@ -18,6 +18,21 @@
     background: var(--text-muted);
 }
 
+/* Conectando… / Reconectando…: punto vacío. */
+.live-status.is-connecting .live-dot {
+    background: transparent;
+    border: 1.5px solid var(--text-muted);
+    box-sizing: border-box;
+}
+
+.live-toggle-skeleton {
+    display: block;
+    width: 40px;
+    height: 20px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+}
+
 .live-toggle {
     min-height: var(--control-sm);
     padding: 0 var(--space-3);

@@ -12,6 +12,7 @@ namespace SmartOps.Web.Services
         public string? CardLast4 { get; set; }
         public DateTime Timestamp { get; set; }
         public decimal Amount { get; set; }
+        public string? Currency { get; set; }
         public string? Status { get; set; }
         public string? Channel { get; set; }
         public string? ErrorCode { get; set; }
@@ -25,6 +26,28 @@ namespace SmartOps.Web.Services
         private readonly ILogger<TransactionDrawerService> _logger;
 
         public TransactionDto? Current => _current;
+
+        /// <summary>
+        /// Id de la transacción para la que se pidió "abrir y analizar" (botón «Analizar la más reciente»
+        /// o «Analizar» de la tabla). El Drawer lo consume una sola vez con <see cref="TryConsumeAutoAnalyze"/>.
+        /// </summary>
+        private int? _autoAnalyzeId;
+
+        /// <summary>Se dispara cuando se creó un diagnóstico o cambió un voto, para que el Dashboard recalcule.</summary>
+        public event Action? DiagnosticsChanged;
+
+        public void NotifyDiagnosticsChanged()
+        {
+            try { DiagnosticsChanged?.Invoke(); }
+            catch (Exception ex) { _logger.LogError(ex, "Exception while notifying DiagnosticsChanged"); }
+        }
+
+        public bool TryConsumeAutoAnalyze(int transactionId)
+        {
+            if (_autoAnalyzeId != transactionId) return false;
+            _autoAnalyzeId = null;
+            return true;
+        }
 
         public TransactionDrawerService(ILogger<TransactionDrawerService> logger)
         {
@@ -118,9 +141,10 @@ namespace SmartOps.Web.Services
             }
         }
 
-        public void Open(TransactionDto dto)
+        public void Open(TransactionDto dto, bool autoAnalyze = false)
         {
             _current = dto;
+            _autoAnalyzeId = autoAnalyze ? dto?.Id : null;
             _logger.LogInformation("Open called. NewId={Id} Subscribers={Count}", _current?.Id.ToString() ?? "null", SnapshotSubscribers().Count);
             if (SnapshotSubscribers().Count == 0)
             {
@@ -133,6 +157,7 @@ namespace SmartOps.Web.Services
         public void Close()
         {
             _current = null;
+            _autoAnalyzeId = null;
             _logger.LogInformation("Close called. Subscribers={Count}", SnapshotSubscribers().Count);
             NotifySubscribers();
         }

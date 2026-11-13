@@ -57,11 +57,6 @@ else
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Needed so MainLayout can read the short-lived "just logged in" cookie set by /account/login,
-// used to decide (server-side, per request) whether to render the page-transition overlay
-// visible on first paint. See MainLayout.razor for details.
-builder.Services.AddHttpContextAccessor();
-
 // Read connection string from the finalized IConfiguration (which includes
 // any overrides added by WebApplicationFactory.ConfigureAppConfiguration).
 builder.Services.AddDbContext<AppDbContext>((sp, options) =>
@@ -175,7 +170,11 @@ builder.Services.AddScoped<SmartOps.Web.Services.DashboardHeaderActionsService>(
 
 // Register TransactionNotifier which bridges publisher events to SignalR
 builder.Services.AddSingleton<SmartOps.Web.Services.TransactionNotifier>();
-    builder.Services.AddSingleton<SmartOps.Web.Services.TransactionDrawerService>();
+// Scoped = uno por circuito. Antes era singleton: abrir el Drawer en una sesión lo abría en
+// todas las sesiones conectadas (y «Analizar la más reciente» habría analizado en todas).
+builder.Services.AddScoped<SmartOps.Web.Services.TransactionDrawerService>();
+builder.Services.AddScoped<SmartOps.Web.Services.DbContextGate>();
+builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticFeedbackService>();
 // Ensure HubContext is available via SignalR server support; SignalR is included in ASP.NET Core
 builder.Services.AddSignalR();
 
@@ -500,18 +499,6 @@ app.MapPost("/account/login", async (HttpContext http, Microsoft.AspNetCore.Iden
         }
 
         await signInManager.SignInAsync(user, isPersistent: false);
-
-        // Short-lived, server-only signal so the very next request (the forced full-page
-        // navigation to the Dashboard done by Login.razor) can render the page-transition
-        // overlay already visible on first paint, avoiding a flash of the Dashboard before the
-        // overlay JS kicks in. MainLayout.razor reads and clears this cookie.
-        http.Response.Cookies.Append("smartops_transition", "1", new CookieOptions
-        {
-            Path = "/",
-            MaxAge = TimeSpan.FromSeconds(30),
-            HttpOnly = true,
-            SameSite = SameSiteMode.Lax
-        });
 
         return Results.Ok();
     }

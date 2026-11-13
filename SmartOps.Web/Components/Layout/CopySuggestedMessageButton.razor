@@ -2,9 +2,9 @@
 @inject IJSRuntime JS
 
 @* Copies ONLY the suggested customer message of a diagnostic, as plain text. *@
-<div class="copy-wrap">
+<div class="@(Compact ? "copy-wrap-ds" : "copy-wrap")">
     <button type="button"
-            class="btn btn-sm copy-btn @StateClass"
+            class="@(Compact ? "btn-ds btn-ds-secondary copy-btn-ds" : "btn btn-sm copy-btn") @StateClass"
             disabled="@(!HasMessage)"
             title="@(HasMessage ? "Copiar el mensaje sugerido para el cliente" : NoMessageText)"
             @onclick="CopyAsync">
@@ -16,7 +16,7 @@
         else
         {
             <span class="bi bi-clipboard" aria-hidden="true"></span>
-            <span>Copiar Mensaje</span>
+            <span>@Label</span>
         }
     </button>
     @if (!HasMessage)
@@ -36,6 +36,12 @@
 
     /// <summary>Diagnostic Markdown; the customer message is extracted from it.</summary>
     [Parameter] public string? Markdown { get; set; }
+
+    /// <summary>Texto del botón. El Drawer usa «Copiar mensaje».</summary>
+    [Parameter] public string Label { get; set; } = "Copiar Mensaje";
+
+    /// <summary>Variante del rediseño (botón secundario de 44px con tokens), usada por el Drawer.</summary>
+    [Parameter] public bool Compact { get; set; }
 
     /// <summary>How long the "¡Copiado!" state stays visible. Overridable for tests.</summary>
     [Parameter] public TimeSpan ConfirmationDuration { get; set; } = TimeSpan.FromSeconds(2);

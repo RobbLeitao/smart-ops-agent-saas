@@ -1,0 +1,548 @@
+/* Dashboard (docs/redesign/01-dashboard.html y 02-dashboard-cargando.html). Solo tokens. */
+
+.dash {
+    max-width: var(--content-max);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    /* Transición: la página entra con fade in (250 ms, ease-out). La dispara el propio DOM al
+       insertarse; no depende de eventos de navegación. */
+    animation: dash-page-in 250ms ease-out both;
+}
+
+/* ── Encabezado ─────────────────────────────────────────────── */
+.dash-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: var(--space-3);
+}
+
+.dash-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 28px;
+    line-height: 34px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.dash-subtitle {
+    margin: var(--space-1) 0 0;
+    color: var(--text-muted);
+}
+
+.dash-meta {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.dash-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* ── Tipografía de apoyo ────────────────────────────────────── */
+.dash-overline {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.dash-small {
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--text-muted);
+}
+
+.dash-muted { color: var(--text-muted); }
+
+.dash-section-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 18px;
+    line-height: 24px;
+    font-weight: 600;
+}
+
+/* ── Tarjetas y grillas ─────────────────────────────────────── */
+.dash-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+}
+
+.dash-grid-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-4);
+}
+
+.dash-grid-panels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+    gap: var(--space-4);
+}
+
+.dash-metric {
+    padding: 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dash-metric-value {
+    font-family: var(--font-display);
+    font-size: 40px;
+    line-height: 44px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-panel {
+    padding: 22px var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.dash-panel-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-2);
+}
+
+/* ── Motivos de falla ───────────────────────────────────────── */
+.dash-reasons {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.dash-reason-row {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr) 44px;
+    align-items: center;
+    gap: 14px;
+}
+
+.dash-reason-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dash-bar-track {
+    display: block;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--surface-raised);
+    overflow: hidden;
+}
+
+.dash-bar-fill {
+    display: block;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--text-muted);
+}
+
+.dash-reason-pct {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* ── Cola de diagnóstico ────────────────────────────────────── */
+.dash-queue { gap: var(--space-4); }
+
+.dash-queue-figure {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.dash-queue-number {
+    font-family: var(--font-display);
+    font-size: 48px;
+    line-height: 1;
+    font-weight: 600;
+}
+
+/* Barra apilada: diagnosticadas en --ai sobre la pista de pendientes en --border-strong. */
+.dash-stack-track {
+    display: flex;
+    height: 10px;
+    border-radius: 5px;
+    background: var(--border-strong);
+    overflow: hidden;
+}
+
+.dash-stack-done {
+    display: block;
+    background: var(--ai);
+}
+
+.dash-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.dash-legend > span {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.dash-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+}
+
+.dash-swatch-ai { background: var(--ai); }
+.dash-swatch-pending { background: var(--border-strong); }
+
+.dash-queue-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: auto;
+}
+
+/* ── Tabla ──────────────────────────────────────────────────── */
+.dash-table-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.dash-table-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+    padding: 20px var(--space-6);
+}
+
+.dash-table-sub { margin: 2px 0 0; }
+
+.dash-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-4);
+}
+
+.dash-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin: 0;
+    color: var(--text-muted);
+}
+
+.dash-search svg {
+    position: absolute;
+    left: 13px;
+    pointer-events: none;
+}
+
+.dash-search input {
+    height: var(--control);
+    width: 220px;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 0 14px 0 38px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-strong);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+}
+
+.dash-search input::placeholder { color: var(--text-muted); }
+
+.dash-check {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--control);
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.dash-check input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--text);
+}
+
+/* Sin scroll vertical propio: la página scrollea y la tabla pagina. Horizontal solo si no entra. */
+.dash-table-scroll {
+    /* position: relative para que los .visually-hidden (absolute) de la tabla queden dentro del
+       contenedor con scroll y no ensanchen la página en pantallas angostas. */
+    position: relative;
+    overflow-x: auto;
+    overflow-y: visible;
+    border-top: 1px solid var(--border);
+}
+
+.dash-table {
+    width: 100%;
+    min-width: 820px;
+    border-collapse: collapse;
+}
+
+.dash-table thead tr {
+    text-align: left;
+    background: var(--surface-sunken);
+}
+
+.dash-table th {
+    padding: 12px var(--space-4);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.dash-table td {
+    padding: 10px var(--space-4);
+    white-space: nowrap;
+}
+
+.dash-table th:first-child,
+.dash-table td:first-child { padding-left: var(--space-6); }
+
+.dash-table th:last-child,
+.dash-table td:last-child { padding-right: var(--space-6); }
+
+.dash-table tbody tr { border-top: 1px solid var(--border-subtle); }
+.dash-table tbody tr:hover { background: var(--surface-raised); }
+
+.dash-table .num { text-align: right; }
+.dash-table .mono { font-family: var(--font-mono); }
+.dash-table .muted { color: var(--text-muted); }
+
+.dash-reason {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.dash-empty {
+    margin: 0;
+    padding: var(--space-6);
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+}
+
+.dash-pager {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-6);
+    border-top: 1px solid var(--border);
+}
+
+.dash-pager-buttons {
+    display: flex;
+    gap: var(--space-2);
+}
+
+/* ── Avisos en vivo ─────────────────────────────────────────── */
+.dash-toasts {
+    position: fixed;
+    right: var(--space-6);
+    bottom: var(--space-6);
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-width: min(360px, calc(100vw - 2 * var(--space-4)));
+}
+
+.dash-toast {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+}
+
+.dash-toast-text { flex: 1 1 auto; }
+
+.dash-toast-close {
+    flex: none;
+    width: var(--control-sm);
+    height: var(--control-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.dash-toast-close:hover { background: var(--surface-raised); color: var(--text); }
+
+/* ── Carga: skeleton y crossfade ────────────────────────────── */
+
+/* Cada bloque apila skeleton y contenido en la misma celda para poder hacer crossfade. */
+.dash-swap {
+    display: grid;
+}
+
+.dash-swap > * {
+    grid-area: 1 / 1;
+    min-width: 0;
+}
+
+/* Regla de los 200 ms: el skeleton nace invisible y solo aparece si la carga sigue pasado ese tiempo. */
+.skel-block {
+    opacity: 0;
+    animation: dash-fade-in 120ms ease-out 200ms forwards;
+}
+
+.skel-block.is-leaving {
+    opacity: 1;
+    animation: dash-fade-out 180ms ease-out forwards;
+}
+
+.is-entering {
+    animation: dash-fade-in 180ms ease-out both;
+}
+
+.skel-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.skel-gap-sm { gap: 10px; }
+.skel-gap-md { gap: var(--space-4); }
+.skel-gap-lg { gap: 20px; }
+
+.skel {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    background: var(--surface-raised);
+}
+
+/* Brillo suave que recorre los bloques grises (1.4 s en bucle). */
+.skel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--border-strong), transparent);
+    opacity: 0.6;
+    transform: translateX(-100%);
+    animation: skel-shimmer 1.4s ease-in-out infinite;
+}
+
+.skel-line { height: 10px; border-radius: 5px; }
+.skel-value { height: 32px; border-radius: 8px; }
+.skel-heading { height: 14px; border-radius: 6px; }
+.skel-big { height: 40px; border-radius: 8px; }
+.skel-bar { height: 8px; border-radius: 4px; }
+.skel-button { height: var(--control); width: 200px; max-width: 100%; margin-top: auto; border-radius: var(--radius-md); }
+.skel-input { height: var(--control); width: 220px; max-width: 100%; border-radius: var(--radius-md); }
+.skel-chip { height: 20px; border-radius: var(--radius-pill); }
+.skel-action { height: var(--control-sm); border-radius: var(--radius-md); }
+.skel-w-220 { width: 220px; max-width: 100%; }
+.skel-w-320 { width: 320px; max-width: 100%; }
+.skel-title-group { flex: 1 1 240px; }
+
+.skel-reason {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+}
+
+.skel-table {
+    border-top: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.skel-table-header {
+    height: var(--control);
+    background: var(--surface-sunken);
+}
+
+.skel-table-row {
+    display: grid;
+    grid-template-columns: 60px 60px 100px minmax(0, 1fr) 80px 90px 90px;
+    gap: var(--space-6);
+    align-items: center;
+    padding: 0 var(--space-6);
+    height: 64px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+@keyframes dash-page-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes dash-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes dash-fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+@keyframes skel-shimmer {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(100%); }
+}
+
+/* Movimiento reducido: sin brillo ni desplazamiento, solo fundidos cortos. */
+@media (prefers-reduced-motion: reduce) {
+    .dash { animation-duration: 150ms; }
+    .skel::after { display: none; }
+    .skel-block { animation-duration: 80ms; }
+    .skel-block.is-leaving,
+    .is-entering { animation-duration: 100ms; }
+}
+
+@media (max-width: 600px) {
+    .dash-reason-row { grid-template-columns: minmax(0, 110px) minmax(0, 1fr) 44px; }
+    .dash-search input { width: 100%; }
+    .dash-search, .dash-filters { width: 100%; }
+}
