@@ -1,22 +1,48 @@
-@* Small interactive island (mirrors NotificationBell/TransactionDetailDrawer's pattern of
-   an InteractiveServer component embedded inside the otherwise static MainLayout) that
-   surfaces the Dashboard's "Pausar/Reanudar notificaciones" action in the shared header.
-   Hidden on any page where Dashboard hasn't registered itself (e.g. Historial, Integraciones). *@
+@* Indicador «En vivo» + Pausar del header (isla interactiva dentro del MainLayout estático).
+   Muestra el estado del HubConnection que publica el Dashboard:
+   «Conectando…» (punto vacío) → «En vivo» → «Reconectando…» si se cae. «Pausado» tiene prioridad.
+   Fuera del Dashboard no se muestra. *@
 @using SmartOps.Web.Services
 @inject DashboardHeaderActionsService HeaderActions
 @implements IDisposable
 
 @if (HeaderActions.IsRegistered)
 {
-    <span class="live-status @(HeaderActions.IsPaused ? "is-paused" : "")" role="status">
-        <span class="live-dot" aria-hidden="true"></span>@(HeaderActions.IsPaused ? "Pausado" : "En vivo")
+    <span class="live-status @StatusClass" role="status">
+        <span class="live-dot" aria-hidden="true"></span>@StatusText
     </span>
     <button type="button" class="live-toggle" aria-label="@(HeaderActions.IsPaused ? "Reanudar notificaciones" : "Pausar notificaciones")" @onclick="Toggle">
         @(HeaderActions.IsPaused ? "Reanudar" : "Pausar")
     </button>
 }
+else if (ShowPlaceholder)
+{
+    @* Primer frame del Dashboard (02-dashboard-cargando.html): todavía no hay conexión. *@
+    <span class="live-status is-connecting" role="status">
+        <span class="live-dot" aria-hidden="true"></span>Conectando…
+    </span>
+    <span class="live-toggle-skeleton" aria-hidden="true"></span>
+}
 
 @code {
+    /// <summary>La página actual es el Dashboard (lo calcula MainLayout al renderizar).</summary>
+    [Parameter] public bool OnDashboard { get; set; }
+
+    private bool ShowPlaceholder => OnDashboard && !HeaderActions.HasUnregistered;
+
+    private string StatusClass => HeaderActions.IsPaused
+        ? "is-paused"
+        : HeaderActions.ConnectionState == LiveConnectionState.Live ? string.Empty : "is-connecting";
+
+    private string StatusText => HeaderActions.IsPaused
+        ? "Pausado"
+        : HeaderActions.ConnectionState switch
+        {
+            LiveConnectionState.Live => "En vivo",
+            LiveConnectionState.Reconnecting => "Reconectando…",
+            _ => "Conectando…"
+        };
+
     protected override void OnInitialized()
     {
         HeaderActions.OnChange += HandleChange;

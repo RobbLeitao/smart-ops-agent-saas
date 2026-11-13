@@ -1,5 +1,4 @@
 // Lightweight, dependency-free UI polish animations for SmartOps.
-// Follows the same window.<module> IIFE pattern used by dashboardCharts.js.
 window.smartOpsAnimations = (function () {
     const activeAnimations = {};
 
@@ -26,7 +25,10 @@ window.smartOpsAnimations = (function () {
             delete activeAnimations[elementId];
         }
 
-        if (fromValue === toValue) {
+        // Movimiento reducido: sin conteo, directo al valor final.
+        const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        if (fromValue === toValue || reduceMotion) {
             el.textContent = toValue + suffix;
             return;
         }

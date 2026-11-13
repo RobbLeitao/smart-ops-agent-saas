@@ -6,6 +6,9 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
+    /* Transición: la página entra con fade in (250 ms, ease-out). La dispara el propio DOM al
+       insertarse; no depende de eventos de navegación. */
+    animation: dash-page-in 250ms ease-out both;
 }
 
 /* ── Encabezado ─────────────────────────────────────────────── */
@@ -506,6 +509,11 @@
     border-top: 1px solid var(--border-subtle);
 }
 
+@keyframes dash-page-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 @keyframes dash-fade-in {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -523,6 +531,7 @@
 
 /* Movimiento reducido: sin brillo ni desplazamiento, solo fundidos cortos. */
 @media (prefers-reduced-motion: reduce) {
+    .dash { animation-duration: 150ms; }
     .skel::after { display: none; }
     .skel-block { animation-duration: 80ms; }
     .skel-block.is-leaving,

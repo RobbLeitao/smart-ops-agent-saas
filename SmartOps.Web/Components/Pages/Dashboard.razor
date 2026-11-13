@@ -530,12 +530,25 @@
             // Lo consume NotificationBell; acá solo se absorbe para evitar warnings de mensaje sin handler.
             hubConnection.On<int>("NotificationCreated", _ => Task.CompletedTask);
 
+            // Estado de la conexión para el indicador del header (DashboardHeaderToggle).
+            hubConnection.Reconnecting += _ => PublishConnectionState(LiveConnectionState.Reconnecting);
+            hubConnection.Reconnected += _ => PublishConnectionState(LiveConnectionState.Live);
+            hubConnection.Closed += _ => PublishConnectionState(LiveConnectionState.Reconnecting);
+
             await hubConnection.StartAsync();
+            await PublishConnectionState(LiveConnectionState.Live);
         }
         catch (Exception ex)
         {
+            // Sin conexión no hay «En vivo»: queda en «Conectando…».
             Logger.LogWarning(ex, "Failed to start SignalR connection for dashboard.");
         }
+    }
+
+    private Task PublishConnectionState(LiveConnectionState state)
+    {
+        if (!disposed) HeaderActions.SetConnectionState(state);
+        return Task.CompletedTask;
     }
 
     private async Task OnTransactionReceivedAsync(int txId)
