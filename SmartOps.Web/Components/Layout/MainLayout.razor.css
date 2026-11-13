@@ -1,12 +1,111 @@
 .page {
     position: relative;
     display: flex;
-    /* Force column layout to avoid leftover reserved sidebar space */
-    flex-direction: column !important;
+    flex-direction: column;
     /* The 100vh floor belongs here (header + main together), not on each page's own
        wrapper — otherwise a min-vh-100 content wrapper stacks on top of the header's own
        height and forces an unnecessary outer scrollbar even when content is short. */
     min-height: 100vh;
+}
+
+/* Header: docs/redesign/01-dashboard.html */
+.app-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-8);
+    padding: 0 var(--space-8);
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+}
+
+.app-header-brand {
+    display: flex;
+    align-items: center;
+    min-height: var(--header);
+    text-decoration: none;
+}
+
+.app-header-logo {
+    display: block;
+    height: 28px;
+    width: auto;
+}
+
+.app-header-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+    align-self: stretch;
+}
+
+.app-header-nav ::deep .app-header-tab {
+    display: flex;
+    align-items: center;
+    min-height: var(--header);
+    box-sizing: border-box;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.app-header-nav ::deep .app-header-tab:hover {
+    color: var(--text);
+}
+
+.app-header-nav ::deep .app-header-tab.active {
+    border-bottom-color: var(--text);
+    color: var(--text);
+}
+
+.app-header-spacer {
+    flex: 1 1 0px;
+}
+
+.app-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-4);
+    padding: var(--space-2) 0;
+    min-width: 0;
+}
+
+.app-header-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+}
+
+.app-header-user {
+    font-size: 13px;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.app-header-link {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    font-size: 13px;
+    color: var(--text);
+    text-decoration: none;
+}
+
+.app-header-link:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+    .app-header {
+        padding: 0 var(--space-4);
+        column-gap: var(--space-4);
+    }
+
+    .app-header-sep {
+        display: none;
+    }
 }
 
 main {
@@ -23,79 +122,19 @@ article.content {
     padding-right: 0.5rem;
 }
 
-.sidebar {
-    background-image: linear-gradient(180deg, rgb(5, 39, 103) 0%, #3a0647 70%);
-}
-
-.top-row {
-    background-color: #f7f7f7;
-    border-bottom: 1px solid #d6d5d5;
-    justify-content: flex-end;
-    height: 3.5rem;
-    display: flex;
-    align-items: center;
-}
-
-    .top-row ::deep a, .top-row ::deep .btn-link {
-        white-space: nowrap;
-        margin-left: 1.5rem;
-        text-decoration: none;
-    }
-
-    .top-row ::deep a:hover, .top-row ::deep .btn-link:hover {
-        text-decoration: underline;
-    }
-
-    .top-row ::deep a:first-child {
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-@media (max-width: 640.98px) {
-    .top-row {
-        justify-content: space-between;
-    }
-
-    .top-row ::deep a, .top-row ::deep .btn-link {
-        margin-left: 0;
-    }
-}
-
 @media (min-width: 641px) {
-    .page {
-        flex-direction: row;
-    }
-
-    .sidebar {
-            display: none; /* remove reserved sidebar space */
-        }
-
-        .top-row {
-            position: sticky;
-            top: 0;
-            z-index: 1;
-            width: 100%;
-        }
-
-        .top-row.auth ::deep a:first-child {
-            flex: 1;
-            text-align: right;
-            width: 0;
-        }
-
-        /* Ensure article and top-row use full-width and no left offset from previous sidebar */
-        .top-row, article {
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
-            margin-left: 0 !important;
+    article {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        margin-left: 0 !important;
     }
 }
 
 #blazor-error-ui {
-    color-scheme: light only;
-    background: lightyellow;
+    background: var(--surface-raised);
+    color: var(--text);
+    border-top: 1px solid var(--danger);
     bottom: 0;
-    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
     box-sizing: border-box;
     display: none;
     left: 0;

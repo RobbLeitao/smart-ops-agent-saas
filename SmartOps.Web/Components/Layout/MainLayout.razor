@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Components.Authorization
+﻿@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Http
 @using Microsoft.Extensions.Logging
 @inherits LayoutComponentBase
@@ -18,6 +18,20 @@
     // Dashboard would otherwise flash before the overlay appears. Every other request/navigation
     // (tab switches, refreshes) never has this cookie and renders the overlay hidden as usual.
     private bool showTransitionOverlayOnLoad;
+
+    private bool IsAuthenticated => authState?.User.Identity?.IsAuthenticated == true;
+
+    // «email · Rol» del header. Solo presentación: lee los claims que ya trae la sesión.
+    private string UserLabel
+    {
+        get
+        {
+            var user = authState?.User;
+            var name = user?.Identity?.Name ?? string.Empty;
+            var roles = user?.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value).ToList();
+            return roles is { Count: > 0 } ? $"{name} · {string.Join(", ", roles)}" : name;
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -41,45 +55,39 @@
 </div>
 
 <div class="page w-100">
-    <header class="header-bar shadow-sm" style="background-color:#212835;border-bottom:1px solid rgba(71,85,103,0.2);">
-        <div class="container d-flex align-items-center py-3">
-            <a class="navbar-brand me-4 text-white h4 d-flex align-items-center" href="/">
-                <img src="/images/logo.png" alt="SmartOps" style="height:34px;object-fit:contain;display:block;" />
-            </a>
+    <header class="app-header">
+        <a class="app-header-brand" href="/">
+            <img src="/images/logo.png" alt="SmartOps" class="app-header-logo" />
+        </a>
 
-            <nav class="nav nav-tabs ms-3" style="border-bottom:none;">
-                            <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">
-                                <i class="bi bi-bar-chart-line nav-icon" aria-hidden="true"></i>
-                                <span class="nav-text">Dashboard</span>
-                            </NavLink>
-                            <NavLink class="nav-link" href="/diagnostics-history">
-                                <i class="bi bi-clock-history nav-icon" aria-hidden="true"></i>
-                                <span class="nav-text">Historial</span>
-                            </NavLink>
-                            <AuthorizeView Roles="Auditor">
-                                <Authorized>
-                                    <NavLink class="nav-link" href="/integrations">
-                                        <i class="bi bi-plug nav-icon" aria-hidden="true"></i>
-                                        <span class="nav-text">Integraciones</span>
-                                    </NavLink>
-                                </Authorized>
-                            </AuthorizeView>
-                        </nav>
+        <nav class="app-header-nav" aria-label="Principal">
+            <NavLink class="app-header-tab" href="/" Match="NavLinkMatch.All">Dashboard</NavLink>
+            <NavLink class="app-header-tab" href="/diagnostics-history">Historial</NavLink>
+            <AuthorizeView Roles="Auditor">
+                <Authorized>
+                    <NavLink class="app-header-tab" href="/integrations">Integraciones</NavLink>
+                </Authorized>
+            </AuthorizeView>
+        </nav>
 
-            <div class="ms-auto text-slate-400 small d-flex align-items-center gap-3">
-                <NotificationBell @rendermode="InteractiveServer" />
-                <div class="text-slate-400 small me-3">Centro de Operaciones</div>
-                @if (authState != null && authState.User.Identity != null && authState.User.Identity.IsAuthenticated)
-                {
-                    <div class="text-slate-200 small">@authState.User.Identity.Name</div>
-                    <DashboardHeaderToggle @rendermode="InteractiveServer" />
-                    <a class="btn btn-sm" data-enhance-nav="false" style="background:transparent;color:#cbd5e1;border:1px solid rgba(148,163,184,0.08);padding:6px 10px;border-radius:8px;text-decoration:none;" href="/account/logout">Cerrar Sesión</a>
-                }
-                else
-                {
-                    <a class="btn btn-sm" style="background:transparent;color:#cbd5e1;border:1px solid rgba(148,163,184,0.08);padding:6px 10px;border-radius:8px;" href="/login">Iniciar Sesión</a>
-                }
-            </div>
+        <div class="app-header-spacer"></div>
+
+        <div class="app-header-actions">
+            @if (IsAuthenticated)
+            {
+                <DashboardHeaderToggle @rendermode="InteractiveServer" />
+            }
+            <NotificationBell @rendermode="InteractiveServer" />
+            <span class="app-header-sep" aria-hidden="true"></span>
+            @if (IsAuthenticated)
+            {
+                <span class="app-header-user">@UserLabel</span>
+                <a class="app-header-link" data-enhance-nav="false" href="/account/logout">Salir</a>
+            }
+            else
+            {
+                <a class="app-header-link" href="/login">Iniciar sesión</a>
+            }
         </div>
     </header>
 

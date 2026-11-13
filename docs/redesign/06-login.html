@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iniciar sesión</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D10}
+a{color:#E8EAED}a:hover{color:#FFFFFF}
+</style>
+</head>
+<body>
+<div style="min-height: 100vh; box-sizing: border-box; padding: 48px 16px; background: #0B0D10; color: #E8EAED; font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 1.45; display: flex; align-items: center; justify-content: center">
+<main style="width: 100%; max-width: 400px; display: flex; flex-direction: column; align-items: stretch; gap: 28px">
+<img src="logo.png" alt="SmartOps" style="height: 40px; width: auto; align-self: center; display: block">
+<form style="background: #111418; border: 1px solid #22262D; border-radius: 14px; padding: 28px; display: flex; flex-direction: column; gap: 20px">
+<div>
+<h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 600; letter-spacing: -0.01em">Iniciá sesión</h1>
+<p style="margin: 4px 0 0; color: #8B929C">Consola de operaciones y diagnóstico con IA.</p>
+</div>
+<label style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 13px; font-weight: 500">Email</span>
+<input type="email" autocomplete="username" value="admin@smartops.com" style="height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 10px; border: 1px solid #2C313A; background: #0E1114; color: #E8EAED; font: inherit">
+</label>
+<label style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 13px; font-weight: 500">Contraseña</span>
+<span style="display: flex">
+<input type="password" autocomplete="current-password" value="contraseña" style="flex: 1 1 auto; min-width: 0; height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 10px 0 0 10px; border: 1px solid #2C313A; border-right: none; background: #0E1114; color: #E8EAED; font: inherit">
+<button type="button" style="height: 44px; padding: 0 14px; border-radius: 0 10px 10px 0; border: 1px solid #2C313A; background: #1C2026; color: #E8EAED; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer">Mostrar</button>
+</span>
+</label>
+<div role="alert" style="display: flex; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1px solid #5A2A30; background: #22141A">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F0616D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.5"></path></svg>
+<span>El email o la contraseña no son correctos. Probá de nuevo.</span>
+</div>
+<button type="submit" style="min-height: 44px; padding: 0 18px; border-radius: 10px; border: none; background: #E8EAED; color: #0B0D10; font: inherit; font-weight: 600; cursor: pointer">Ingresar</button>
+</form>
+<p style="margin: 0; text-align: center; font-size: 13px; color: #8B929C">¿No tenés acceso? Pedíselo a un Auditor de tu equipo.</p>
+</main>
+</div>
+</body>
+</html>

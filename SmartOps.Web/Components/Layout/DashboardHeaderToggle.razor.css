@@ -1,0 +1,35 @@
+/* «En vivo» + Pausar del header (docs/redesign/01-dashboard.html). */
+.live-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--success);
+}
+
+.live-status.is-paused .live-dot {
+    background: var(--text-muted);
+}
+
+.live-toggle {
+    min-height: var(--control-sm);
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.live-toggle:hover {
+    background: var(--surface-raised);
+}

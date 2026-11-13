@@ -8,8 +8,11 @@
 
 @if (HeaderActions.IsRegistered)
 {
-    <button class="btn btn-sm" style="background:transparent;color:#cbd5e1;border:1px solid rgba(148,163,184,0.08);padding:6px 10px;border-radius:8px;" @onclick="Toggle">
-        @(HeaderActions.IsPaused ? "Reanudar notificaciones" : "Pausar notificaciones")
+    <span class="live-status @(HeaderActions.IsPaused ? "is-paused" : "")" role="status">
+        <span class="live-dot" aria-hidden="true"></span>@(HeaderActions.IsPaused ? "Pausado" : "En vivo")
+    </span>
+    <button type="button" class="live-toggle" aria-label="@(HeaderActions.IsPaused ? "Reanudar notificaciones" : "Pausar notificaciones")" @onclick="Toggle">
+        @(HeaderActions.IsPaused ? "Reanudar" : "Pausar")
     </button>
 }
 

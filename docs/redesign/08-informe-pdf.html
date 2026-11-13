@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Informe de diagnóstico · PDF</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#111418}a:hover{color:#000000}
+</style>
+</head>
+<body>
+<div style="width: 794px; height: 1123px; box-sizing: border-box; background: #FFFFFF; color: #111418; font-family: Inter, system-ui, sans-serif; font-size: 13px; line-height: 1.55; display: flex; flex-direction: column">
+
+<div style="height: 88px; box-sizing: border-box; padding: 0 56px; background: #0B0D10; display: flex; align-items: center; justify-content: space-between">
+<img src="logo.png" alt="SmartOps" style="height: 30px; width: auto; display: block">
+<span style="color: #E8EAED; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase">Informe de diagnóstico</span>
+</div>
+
+<main style="flex: 1 1 auto; padding: 40px 56px 0; display: flex; flex-direction: column; gap: 24px">
+
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2">Transacción 1376 · Card declined</h1>
+<p style="margin: 0; color: #5B6270">Diagnóstico generado por IA el 13/11/2026 a las 13:32</p>
+</div>
+
+<dl style="margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid #D5D8DD; border-bottom: 1px solid #D5D8DD">
+<div style="padding: 12px 12px 12px 0; border-right: 1px solid #D5D8DD"><dt style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #5B6270">Monto</dt><dd style="margin: 2px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 14px">$ 98,54</dd></div>
+<div style="padding: 12px; border-right: 1px solid #D5D8DD"><dt style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #5B6270">Tarjeta</dt><dd style="margin: 2px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 14px">•••• 5887</dd></div>
+<div style="padding: 12px; border-right: 1px solid #D5D8DD"><dt style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #5B6270">Fecha</dt><dd style="margin: 2px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 14px">13/11/2026 13:32</dd></div>
+<div style="padding: 12px 0 12px 12px"><dt style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #5B6270">Canal</dt><dd style="margin: 2px 0 0; font-size: 14px">Simulator</dd></div>
+<div style="grid-column: span 2; padding: 12px 12px 12px 0; border-top: 1px solid #D5D8DD; border-right: 1px solid #D5D8DD"><dt style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #5B6270">Operador</dt><dd style="margin: 2px 0 0; font-size: 14px">admin@smartops.com</dd></div>
+<div style="grid-column: span 2; padding: 12px 0 12px 12px; border-top: 1px solid #D5D8DD"><dt style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #5B6270">Valoración del operador</dt><dd style="margin: 2px 0 0; font-size: 14px">Útil</dd></div>
+</dl>
+
+<section style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 600">Qué pasó</h2>
+<p style="margin: 0; font-size: 14px">El emisor rechazó la tarjeta. Las causas habituales son fondos insuficientes, tarjeta bloqueada, límite diario superado o un filtro de fraude del banco.</p>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 600">Qué hacer</h2>
+<ol style="margin: 0; padding-left: 22px; font-size: 14px; display: flex; flex-direction: column; gap: 4px">
+<li>Verificar el estado de la tarjeta con el banco emisor.</li>
+<li>Ofrecer al cliente reintentar con otra tarjeta.</li>
+<li>Revisar que no lo haya bloqueado un filtro de fraude del procesador.</li>
+<li>Registrar el incidente con el error y la hora.</li>
+</ol>
+</section>
+
+<section style="display: flex; flex-direction: column; gap: 8px">
+<h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 600">Mensaje para el cliente</h2>
+<div style="border: 1px solid #D5D8DD; background: #F4F5F7; border-radius: 8px; padding: 16px 18px">
+<p style="margin: 0; font-size: 14px">Hola, tu pago de $ 98,54 fue rechazado por tu banco. Revisá que la tarjeta tenga fondos y no esté bloqueada, o probá con otra tarjeta. Si sigue fallando, escribinos y lo resolvemos.</p>
+</div>
+</section>
+
+</main>
+
+<footer style="margin: 0 56px; padding: 16px 0 40px; border-top: 1px solid #D5D8DD; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #5B6270">
+<div style="display: flex; justify-content: space-between; gap: 16px">
+<span>ID de diagnóstico <span style="font-family: 'JetBrains Mono', monospace; color: #111418">59d04994-9743-4d56-8da2-21b76eacb65d</span></span>
+<span>Página 1 de 1</span>
+</div>
+<span>Documento interno de SmartOps. Los datos de tarjeta están enmascarados. Exportado el 13/11/2026 14:05 por admin@smartops.com.</span>
+</footer>
+
+</div>
+</body>
+</html>
