@@ -7,6 +7,8 @@
 @inject IJSRuntime JS
 @using Microsoft.AspNetCore.Components.Authorization
 @inject AuthenticationStateProvider AuthStateProvider
+@inject SmartOps.Web.Services.DiagnosticFeedbackService FeedbackService
+@inject Microsoft.Extensions.Logging.ILogger<DiagnosticsHistory> Logger
 @inject Microsoft.AspNetCore.Identity.UserManager<SmartOps.Infrastructure.Data.ApplicationUser> UserManager
 
 <LoggingErrorBoundary>
@@ -330,40 +332,16 @@
 
             if (!string.IsNullOrWhiteSpace(userId))
             {
-                var existing = await Db.DiagnosticFeedback.FirstOrDefaultAsync(x => x.DiagnosticId == activeDiagnostic.Id && x.UserId == userId);
-                if (existing == null)
-                {
-                    existing = new SmartOps.Core.Entities.DiagnosticFeedback
-                    {
-                        Id = Guid.NewGuid(),
-                        DiagnosticId = activeDiagnostic.Id,
-                        UserId = userId,
-                        IsUseful = helpful,
-                        VotedAt = DateTime.UtcNow
-                    };
-                    Db.DiagnosticFeedback.Add(existing);
-                }
-                else
-                {
-                    existing.IsUseful = helpful;
-                    existing.VotedAt = DateTime.UtcNow;
-                }
-
-                await Db.SaveChangesAsync();
-                activeFeedback = existing;
+                // Servicio compartido con el Drawer: crea o cambia el voto (con reintento como UPDATE
+                // ante un voto concurrente) y mantiene el campo legado Diagnostic.WasHelpful.
+                activeFeedback = await FeedbackService.VoteAsync(activeDiagnostic.Id, userId, helpful);
+                showFeedbackSaved = true;
             }
-
-            var entity = await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == activeDiagnostic.Id);
-            if (entity != null)
-            {
-                entity.WasHelpful = helpful;
-                await Db.SaveChangesAsync();
-            }
-
-            showFeedbackSaved = true;
         }
-        catch
+        catch (Exception ex)
         {
+            Logger.LogError(ex, "No se pudo guardar el voto del diagnóstico {DiagnosticId}", activeDiagnostic.Id);
+            showFeedbackThanks = false;
         }
         finally
         {

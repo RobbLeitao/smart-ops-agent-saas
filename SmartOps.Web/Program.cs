@@ -174,6 +174,7 @@ builder.Services.AddSingleton<SmartOps.Web.Services.TransactionNotifier>();
 // todas las sesiones conectadas (y «Analizar la más reciente» habría analizado en todas).
 builder.Services.AddScoped<SmartOps.Web.Services.TransactionDrawerService>();
 builder.Services.AddScoped<SmartOps.Web.Services.DbContextGate>();
+builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticFeedbackService>();
 // Ensure HubContext is available via SignalR server support; SignalR is included in ASP.NET Core
 builder.Services.AddSignalR();
 
