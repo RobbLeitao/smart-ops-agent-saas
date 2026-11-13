@@ -77,6 +77,20 @@ namespace SmartOps.Web.Tests
             Assert.Contains("Dejalo vacío para usar OpenAI", cut.Markup);
         }
 
+        [Fact]
+        public void SaveHint_SaysChangesApplyOnNextDiagnostic_AndSuccessShowsConfirmation()
+        {
+            var cut = _ctx.Render<SmartOps.Web.Components.Pages.Integrations>();
+            Assert.Contains("Los cambios se aplican en el próximo diagnóstico.", cut.Markup);
+            Assert.DoesNotContain("se simula", cut.Markup);
+            Assert.Empty(cut.FindAll(".toast-soft"));
+
+            ClickSave(cut); // Local provider: no required fields
+
+            cut.WaitForAssertion(() => Assert.Single(cut.FindAll(".toast-soft")));
+            Assert.Equal("Local", ReadSetting("Integrations.Provider"));
+        }
+
         [Theory]
         [InlineData("https://api.groq.com/openai/v1")]
         [InlineData("http://localhost:11434/v1")]
