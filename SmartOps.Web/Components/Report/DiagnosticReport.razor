@@ -1,0 +1,229 @@
+@using SmartOps.Web.Services
+@using SmartOps.Web.Components.Shared
+
+@* Informe PDF de un diagnóstico (docs/redesign/08-informe-pdf.html). Lo renderiza DiagnosticReportService
+   con HtmlRenderer y se abre en una ventana aparte para imprimir (wwwroot/js/export.js). Esa ventana no
+   carga app.css: los tokens print-* se declaran acá (un test los compara con docs/redesign/tokens.json).
+   Todo el texto sale escapado por Razor; el diagnóstico pasa por DiagnosticSections (Markdig sin HTML). *@
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <base href="@Model.BaseHref" />
+    <title>Diagnóstico de TX @Model.TransactionId · SmartOps</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+    <style>
+        :root {
+            --print-paper: #ffffff;
+            --print-band: #0b0d10;
+            --print-ink: #111418;
+            --print-muted: #5b6270;
+            --print-rule: #d5d8dd;
+            --print-box: #f4f5f7;
+            --font-display: "Space Grotesk", Inter, system-ui, sans-serif;
+            --font-sans: Inter, system-ui, sans-serif;
+            --font-mono: "JetBrains Mono", ui-monospace, monospace;
+        }
+
+        /* Sin margen de página: el navegador no tiene dónde poner su encabezado y su pie. */
+        @@page { size: A4; margin: 0; }
+
+        /* Sin esto el navegador no imprime fondos (la franja negra, el recuadro del mensaje). */
+        * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        html, body {
+            margin: 0;
+            background: var(--print-paper);
+        }
+
+        body {
+            color: var(--print-ink);
+            font-family: var(--font-sans);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .sheet {
+            width: 210mm;
+            min-height: 296mm;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            background: var(--print-paper);
+        }
+
+        .band {
+            height: 88px;
+            padding: 0 56px;
+            background: var(--print-band);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex: none;
+        }
+
+        .band img { height: 30px; width: auto; display: block; }
+
+        .band-label {
+            color: var(--print-paper);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        /* El contenido va en una tabla de una celda: Chrome repite thead/tfoot en cada hoja, así que si el
+           informe pasa a una segunda hoja también tiene margen arriba y abajo (la franja queda solo en la 1ª). */
+        .flow { width: 100%; border-collapse: collapse; flex: none; }
+        .flow td { padding: 0 56px; vertical-align: top; }
+        .flow-space { height: 40px; }
+
+        .content { display: flex; flex-direction: column; gap: 24px; }
+
+        .title { display: flex; flex-direction: column; gap: 4px; }
+
+        .title h1 {
+            margin: 0;
+            font-family: var(--font-display);
+            font-size: 26px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            line-height: 1.2;
+        }
+
+        .title p { margin: 0; color: var(--print-muted); }
+
+        .data {
+            margin: 0;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            border-top: 1px solid var(--print-rule);
+            border-bottom: 1px solid var(--print-rule);
+            break-inside: avoid;
+        }
+
+        .data > div { padding: 12px; border-right: 1px solid var(--print-rule); min-width: 0; }
+        .data > div:nth-child(4), .data > div:last-child { border-right: none; padding-right: 0; }
+        .data > div:nth-child(1), .data > div:nth-child(5) { padding-left: 0; }
+        .data > .wide { grid-column: span 2; border-top: 1px solid var(--print-rule); }
+
+        .data dt {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--print-muted);
+        }
+
+        .data dd { margin: 2px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+        .mono { font-family: var(--font-mono); }
+
+        /* Secciones (DiagnosticSections con HeadingLevel=2, sin botón Copiar). */
+        .sections { display: flex; flex-direction: column; gap: 24px; }
+        .diag-block { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+        .diag-block-message { gap: 8px; break-inside: avoid; }
+
+        .diag-overline {
+            margin: 0;
+            font-family: var(--font-display);
+            font-size: 17px;
+            font-weight: 600;
+            break-after: avoid;
+        }
+
+        .diag-md p { margin: 0 0 8px; }
+        .diag-md ul, .diag-md ol { margin: 0 0 8px; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+        .diag-md p:last-child, .diag-md ul:last-child, .diag-md ol:last-child { margin-bottom: 0; }
+        .diag-md li { break-inside: avoid; }
+        .diag-md h1, .diag-md h2, .diag-md h3, .diag-md h4, .diag-md h5, .diag-md h6 {
+            margin: 8px 0 4px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--print-muted);
+        }
+        .diag-md a { color: var(--print-ink); }
+        .diag-md code { font-family: var(--font-mono); }
+        .diag-md blockquote { margin: 0; }
+
+        .diag-message {
+            border: 1px solid var(--print-rule);
+            background: var(--print-box);
+            border-radius: 8px;
+            padding: 16px 18px;
+            overflow-wrap: anywhere;
+        }
+
+        .push { flex: 1 1 auto; }
+
+        .foot {
+            margin: 0 56px;
+            padding: 16px 0 40px;
+            border-top: 1px solid var(--print-rule);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 12px;
+            color: var(--print-muted);
+            break-inside: avoid;
+        }
+
+        .foot .mono { color: var(--print-ink); }
+    </style>
+</head>
+<body>
+    <div class="sheet">
+        <header class="band">
+            <img src="images/logo.png" alt="SmartOps" />
+            <span class="band-label">Informe de diagnóstico</span>
+        </header>
+
+        <table class="flow" role="presentation">
+            <thead><tr><td><div class="flow-space"></div></td></tr></thead>
+            <tbody>
+                <tr>
+                    <td>
+                        <main class="content">
+                            <div class="title">
+                                <h1>Transacción @Model.TransactionId · @Model.Reason</h1>
+                                <p>Diagnóstico generado por IA el @Model.GeneratedDate a las @Model.GeneratedTime</p>
+                            </div>
+
+                            <dl class="data">
+                                <div><dt>Monto</dt><dd class="mono">@Model.Amount</dd></div>
+                                <div><dt>Tarjeta</dt><dd class="mono">@Model.Card</dd></div>
+                                <div><dt>Fecha</dt><dd class="mono">@Model.Date</dd></div>
+                                <div><dt>Canal</dt><dd>@Model.Channel</dd></div>
+                                <div class="wide"><dt>Operador</dt><dd>@Model.Operator</dd></div>
+                                <div class="wide"><dt>Valoración</dt><dd>@Model.Vote</dd></div>
+                            </dl>
+
+                            <div class="sections">
+                                <DiagnosticSections Markdown="@Model.Markdown" ShowCopyButton="false" HeadingLevel="2" />
+                            </div>
+                        </main>
+                    </td>
+                </tr>
+            </tbody>
+            <tfoot><tr><td><div class="flow-space"></div></td></tr></tfoot>
+        </table>
+
+        <div class="push"></div>
+
+        <footer class="foot">
+            <span>ID de diagnóstico <span class="mono">@Model.DiagnosticId</span></span>
+            <span>Documento interno de SmartOps. Los datos de tarjeta están enmascarados. Exportado el @Model.ExportedAt por @(Model.ExportedBy).</span>
+        </footer>
+    </div>
+</body>
+</html>
+
+@code {
+    [Parameter, EditorRequired] public DiagnosticReportModel Model { get; set; } = default!;
+}
