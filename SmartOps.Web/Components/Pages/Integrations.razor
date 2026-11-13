@@ -79,7 +79,7 @@
                         <div class="col-lg-6">
                             <label class="form-label text-slate-200">API Key <span class="text-danger">*</span></label>
                             <div class="input-group">
-                                <input class="form-control bg-[#11151b] border-0 text-slate-200 @(ShowValidationErrors && string.IsNullOrWhiteSpace(ApiKey) ? "is-invalid" : string.Empty)" type="@ApiKeyInputType" @bind="ApiKey" placeholder="sk-..." />
+                                <input class="form-control @(ShowValidationErrors && string.IsNullOrWhiteSpace(ApiKey) ? "is-invalid" : string.Empty)" type="@ApiKeyInputType" @bind="ApiKey" placeholder="sk-..." />
                                 <button class="btn btn-outline-secondary" type="button" @onclick="ToggleApiKeyVisibility">
                                     @(ShowApiKey ? "Ocultar" : "Mostrar")
                                 </button>
@@ -91,7 +91,7 @@
                         </div>
                         <div class="col-lg-6">
                             <label class="form-label text-slate-200">@(SelectedProvider == ModelProvider.AzureOpenAI ? "Deployment / Model ID" : "Model ID") <span class="text-danger">*</span></label>
-                            <input class="form-control bg-[#11151b] border-0 text-slate-200 @(ShowValidationErrors && string.IsNullOrWhiteSpace(ModelId) ? "is-invalid" : string.Empty)" @bind="ModelId" placeholder="gpt-4o" />
+                            <input class="form-control @(ShowValidationErrors && string.IsNullOrWhiteSpace(ModelId) ? "is-invalid" : string.Empty)" @bind="ModelId" placeholder="gpt-4o" />
                             @if (ShowValidationErrors && string.IsNullOrWhiteSpace(ModelId))
                             {
                                 <div class="text-danger small mt-1">El Model ID es obligatorio.</div>
@@ -101,7 +101,7 @@
                         {
                             <div class="col-12">
                                 <label class="form-label text-slate-200">Endpoint <span class="text-danger">*</span></label>
-                                <input class="form-control bg-[#11151b] border-0 text-slate-200 @(ShowValidationErrors && string.IsNullOrWhiteSpace(Endpoint) ? "is-invalid" : string.Empty)" @bind="Endpoint" placeholder="https://mi-recurso.openai.azure.com/" />
+                                <input class="form-control @(ShowValidationErrors && string.IsNullOrWhiteSpace(Endpoint) ? "is-invalid" : string.Empty)" @bind="Endpoint" placeholder="https://mi-recurso.openai.azure.com/" />
                                 @if (ShowValidationErrors && string.IsNullOrWhiteSpace(Endpoint))
                                 {
                                     <div class="text-danger small mt-1">El endpoint de Azure OpenAI es obligatorio.</div>
@@ -112,7 +112,7 @@
                         {
                             <div class="col-12">
                                 <label class="form-label text-slate-200">Endpoint <span class="text-slate-400 small">(opcional)</span></label>
-                                <input class="form-control bg-[#11151b] border-0 text-slate-200 @(ShowValidationErrors && OpenAIEndpointError is not null ? "is-invalid" : string.Empty)" @bind="Endpoint" placeholder="https://api.groq.com/openai/v1" />
+                                <input class="form-control @(ShowValidationErrors && OpenAIEndpointError is not null ? "is-invalid" : string.Empty)" @bind="Endpoint" placeholder="https://api.groq.com/openai/v1" />
                                 @if (ShowValidationErrors && OpenAIEndpointError is not null)
                                 {
                                     <div class="text-danger small mt-1">@OpenAIEndpointError</div>
