@@ -1,123 +1,123 @@
 @page "/login"
 @layout SmartOps.Web.Components.LoginLayout
 @rendermode InteractiveServer
-@using Microsoft.AspNetCore.Identity
-@inject HttpClient Http
+@using SmartOps.Web.Services
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
-<style>
-    .login-panel { max-width:420px;margin:80px auto;padding:28px;border-radius:12px;background:#1e2330;border:1px solid rgba(255,255,255,0.04); }
-    .login-panel h3 { color:#e6eef8; }
-    .login-label { color:#cbd5e1; }
+<PageTitle>Iniciar sesión · SmartOps</PageTitle>
 
-    /* Transición Login → Dashboard (docs/redesign/README.md): la tarjeta se va con fade out
-       (opacidad 1→0 y sube 8px, 200 ms, ease-in) y recién después se navega. */
-    .login-panel { transition: opacity 200ms ease-in, transform 200ms ease-in; }
-    .login-panel.is-leaving { opacity: 0; transform: translateY(-8px); }
+@* Login (docs/redesign/06-login.html). *@
+<main class="login @(isLeaving ? "is-leaving" : null)">
+    <img src="/images/logo.png" alt="SmartOps" class="login-logo" />
 
-    @@media (prefers-reduced-motion: reduce) {
-        .login-panel { transition: opacity 120ms ease-in; }
-        .login-panel.is-leaving { transform: none; }
-    }
-</style>
+    <form class="login-card" novalidate @onsubmit="HandleLogin">
+        <div>
+            <h1 class="login-title">Iniciá sesión</h1>
+            <p class="login-subtitle">Consola de operaciones y diagnóstico con IA.</p>
+        </div>
 
-<div class="login-panel @(isLeaving ? "is-leaving" : "")">
-    <h3>Iniciar Sesión</h3>
-    <div class="mb-3">
-        <label class="login-label">Email</label>
-        <input class="form-control" @bind="Email" disabled="@isLoading" />
-    </div>
-    <div class="mb-3">
-        <label class="login-label">Contraseña</label>
-        <input class="form-control" type="password" @bind="Password" disabled="@isLoading" />
-    </div>
-    <div class="d-flex gap-2">
-        <button class="btn btn-primary" @onclick="HandleLogin" disabled="@isLoading">@(isLoading ? "Ingresando…" : "Entrar")</button>
+        <div class="ds-field">
+            <label class="ds-label" for="login-email">Email</label>
+            <input id="login-email" class="ds-input" type="email" autocomplete="username" spellcheck="false"
+                   aria-invalid="@(EmailError is not null ? "true" : "false")"
+                   aria-describedby="@(EmailError is not null ? "login-email-error" : null)"
+                   @bind="Email" disabled="@isLoading" />
+            @if (EmailError is not null)
+            {
+                <span id="login-email-error" class="ds-error">@EmailError</span>
+            }
+        </div>
 
-    </div>
-    @if (!string.IsNullOrEmpty(ErrorMessage))
-    {
-        <div class="mt-2 text-danger">@ErrorMessage</div>
-    }
-</div>
+        <div class="ds-field">
+            <label class="ds-label" for="login-password">Contraseña</label>
+            <span class="ds-reveal">
+                <input id="login-password" class="ds-input" type="@(showPassword ? "text" : "password")" autocomplete="current-password"
+                       aria-invalid="@(PasswordError is not null ? "true" : "false")"
+                       aria-describedby="@(PasswordError is not null ? "login-password-error" : null)"
+                       @bind="Password" disabled="@isLoading" />
+                <button type="button" class="ds-reveal-btn" aria-controls="login-password" aria-pressed="@(showPassword ? "true" : "false")"
+                        disabled="@isLoading" @onclick="() => showPassword = !showPassword">@(showPassword ? "Ocultar" : "Mostrar")</button>
+            </span>
+            @if (PasswordError is not null)
+            {
+                <span id="login-password-error" class="ds-error">@PasswordError</span>
+            }
+        </div>
 
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="ds-alert ds-alert-danger" role="alert">
+                <svg class="ds-alert-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.5"></path></svg>
+                <span>@ErrorMessage</span>
+            </div>
+        }
+
+        <button type="submit" class="btn-ds btn-ds-primary login-submit" disabled="@isLoading">@(isLoading ? "Ingresando…" : "Ingresar")</button>
+    </form>
+
+    <p class="login-footnote">¿No tenés acceso? Pedíselo a un Auditor de tu equipo.</p>
+</main>
 
 @code {
     private string Email { get; set; } = string.Empty;
     private string Password { get; set; } = string.Empty;
     private string? ErrorMessage;
+    private bool showValidation;
+    private bool showPassword;
     private bool isLoading;
     private bool isLeaving;
 
-    // Debe coincidir con la transición CSS de .login-panel.is-leaving.
+    // Debe coincidir con la transición CSS de .login.is-leaving.
     private static readonly TimeSpan LeaveDuration = TimeSpan.FromMilliseconds(200);
+
+    private string? EmailError => showValidation && string.IsNullOrWhiteSpace(Email) ? LoginErrorMapper.EmailRequired : null;
+    private string? PasswordError => showValidation && string.IsNullOrWhiteSpace(Password) ? LoginErrorMapper.PasswordRequired : null;
 
     private async Task HandleLogin()
     {
         if (isLoading) return;
 
         ErrorMessage = null;
+        showValidation = true;
 
-        // Validation: require both fields
-        if (string.IsNullOrWhiteSpace(Email) || string.IsNullOrWhiteSpace(Password))
+        // Campos vacíos: validación en el formulario, sin llamar al servidor.
+        if (EmailError is not null || PasswordError is not null)
         {
-            ErrorMessage = "Los campos están vacíos.";
             return;
         }
 
         isLoading = true;
 
-        // Call the account HTTP endpoint which will set the auth cookie outside the Blazor circuit
+        int? status = null;
         try
         {
-            var payload = new { Email = Email, Password = Password };
+            // The account endpoint sets the auth cookie outside the Blazor circuit.
             var uri = Navigation.ToAbsoluteUri("/account/login").ToString();
-            // Serialize in C# and send raw JSON string to JS to avoid double-serialization
-            var jsonPayload = System.Text.Json.JsonSerializer.Serialize(payload);
+            var jsonPayload = System.Text.Json.JsonSerializer.Serialize(new { Email = Email.Trim(), Password });
             var jsResult = await JS.InvokeAsync<string>("fetchLogin", uri, jsonPayload);
-            var doc = System.Text.Json.JsonDocument.Parse(jsResult);
-            var status = doc.RootElement.GetProperty("status").GetInt32();
-            var text = doc.RootElement.GetProperty("text").GetString() ?? string.Empty;
-            if (status >= 200 && status <= 299)
-            {
-                // Fade out de la tarjeta y recién después la navegación completa (forceLoad: la cookie
-                // de auth la necesita). El Dashboard entra con su propio fade in y skeleton.
-                isLeaving = true;
-                StateHasChanged();
-                await Task.Delay(LeaveDuration);
-                Navigation.NavigateTo("/", true);
-                return;
-            }
-            else if (status == 401)
-            {
-                ErrorMessage = "Usuario o constraseña incorrectos";
-            }
-            else if (status == 400)
-            {
-                try
-                {
-                    var bodyDoc = System.Text.Json.JsonDocument.Parse(text);
-                    if (bodyDoc.RootElement.TryGetProperty("error", out var e)) ErrorMessage = e.GetString() ?? "Los campos están vacíos.";
-                    else ErrorMessage = "Los campos están vacíos.";
-                }
-                catch
-                {
-                    ErrorMessage = "Los campos están vacíos.";
-                }
-            }
-            else
-            {
-                ErrorMessage = "Ocurrió un error al iniciar sesión. Intentá nuevamente.";
-            }
+            using var doc = System.Text.Json.JsonDocument.Parse(jsResult);
+            status = doc.RootElement.GetProperty("status").GetInt32();
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Login HTTP error: {ex}");
-            ErrorMessage = "Ocurrió un error al iniciar sesión. Intentá nuevamente.";
+            // Network / JS interop failure: no HTTP status. Never log the payload.
+            Console.Error.WriteLine($"Login request failed: {ex.GetType().Name}");
         }
 
-        // Solo se llega acá si el login no fue exitoso: el botón vuelve a «Entrar».
+        ErrorMessage = LoginErrorMapper.Map(status);
+        if (ErrorMessage is null)
+        {
+            // Fade out de la tarjeta y recién después la navegación completa (forceLoad: la cookie
+            // de auth la necesita). El Dashboard entra con su propio fade in y skeleton.
+            isLeaving = true;
+            StateHasChanged();
+            await Task.Delay(LeaveDuration);
+            Navigation.NavigateTo("/", true);
+            return;
+        }
+
+        // Solo se llega acá si el login no fue exitoso: el botón vuelve a «Ingresar».
         isLoading = false;
     }
 }

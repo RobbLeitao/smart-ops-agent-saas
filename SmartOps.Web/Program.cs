@@ -495,7 +495,6 @@ app.MapPost("/account/login", async (HttpContext http, Microsoft.AspNetCore.Iden
     {
         using var sr = new StreamReader(http.Request.Body);
         var body = await sr.ReadToEndAsync();
-        Console.Error.WriteLine($"[DEBUG] /account/login body: '{body}'");
         if (string.IsNullOrWhiteSpace(body)) return Results.BadRequest(new { error = "Los campos están vacíos." });
         var dict = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string,string>>(body, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         var email = dict != null && dict.TryGetValue("Email", out var e) ? e : string.Empty;
