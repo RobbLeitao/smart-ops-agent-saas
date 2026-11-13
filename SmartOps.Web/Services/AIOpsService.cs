@@ -105,7 +105,7 @@ namespace SmartOps.Web.Services
             catch (Exception ex)
             {
                 throw new AiEngineException(
-                    "No se pudo inicializar el conector de IA. Verificá el proveedor, el Model ID y (si aplica) el endpoint de Azure configurados en /integrations.",
+                    "No se pudo inicializar el conector de IA. Verificá el proveedor, el Model ID y (si aplica) el endpoint configurados en /integrations.",
                     ex);
             }
 

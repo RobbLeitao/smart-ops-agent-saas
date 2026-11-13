@@ -1,0 +1,93 @@
+@using SmartOps.Web.Services
+@inject IJSRuntime JS
+
+@* Copies ONLY the suggested customer message of a diagnostic, as plain text. *@
+<div class="copy-wrap">
+    <button type="button"
+            class="btn btn-sm copy-btn @StateClass"
+            disabled="@(!HasMessage)"
+            title="@(HasMessage ? "Copiar el mensaje sugerido para el cliente" : NoMessageText)"
+            @onclick="CopyAsync">
+        @if (state == CopyState.Copied)
+        {
+            <span class="bi bi-check2" aria-hidden="true"></span>
+            <span>¡Copiado!</span>
+        }
+        else
+        {
+            <span class="bi bi-clipboard" aria-hidden="true"></span>
+            <span>Copiar Mensaje</span>
+        }
+    </button>
+    @if (!HasMessage)
+    {
+        <div class="copy-note small">@NoMessageText</div>
+    }
+    else if (state == CopyState.Failed)
+    {
+        <div class="copy-error small" role="alert">No se pudo copiar al portapapeles. Seleccioná el mensaje y copialo manualmente.</div>
+    }
+</div>
+
+@code {
+    public const string NoMessageText = "Este diagnóstico no tiene un mensaje para el cliente reconocible.";
+
+    private enum CopyState { Idle, Copied, Failed }
+
+    /// <summary>Diagnostic Markdown; the customer message is extracted from it.</summary>
+    [Parameter] public string? Markdown { get; set; }
+
+    /// <summary>How long the "¡Copiado!" state stays visible. Overridable for tests.</summary>
+    [Parameter] public TimeSpan ConfirmationDuration { get; set; } = TimeSpan.FromSeconds(2);
+
+    private string? message;
+    private string? lastMarkdown;
+    private CopyState state;
+    private int attempt;
+
+    private bool HasMessage => message is not null;
+
+    private string StateClass => state switch
+    {
+        CopyState.Copied => "copied",
+        CopyState.Failed => "failed",
+        _ => string.Empty
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (Markdown == lastMarkdown) return;
+        lastMarkdown = Markdown;
+        message = SuggestedMessageExtractor.TryExtractPlainText(Markdown, out var text) ? text : null;
+        state = CopyState.Idle;
+    }
+
+    private async Task CopyAsync()
+    {
+        if (message is null) return;
+
+        var current = ++attempt;
+        bool ok;
+        try
+        {
+            ok = await JS.InvokeAsync<bool>("smartOpsCopyText", message);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Copy suggested message failed: {ex.GetType().Name}: {ex.Message}");
+            ok = false;
+        }
+
+        state = ok ? CopyState.Copied : CopyState.Failed;
+        StateHasChanged();
+
+        if (!ok) return;
+
+        await Task.Delay(ConfirmationDuration);
+        if (current == attempt && state == CopyState.Copied)
+        {
+            state = CopyState.Idle;
+            StateHasChanged();
+        }
+    }
+}

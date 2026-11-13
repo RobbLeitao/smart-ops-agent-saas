@@ -108,6 +108,20 @@
                                 }
                             </div>
                         }
+                        @if (SelectedProvider == ModelProvider.OpenAI)
+                        {
+                            <div class="col-12">
+                                <label class="form-label text-slate-200">Endpoint <span class="text-slate-400 small">(opcional)</span></label>
+                                <input class="form-control bg-[#11151b] border-0 text-slate-200 @(ShowValidationErrors && OpenAIEndpointError is not null ? "is-invalid" : string.Empty)" @bind="Endpoint" placeholder="https://api.groq.com/openai/v1" />
+                                @if (ShowValidationErrors && OpenAIEndpointError is not null)
+                                {
+                                    <div class="text-danger small mt-1">@OpenAIEndpointError</div>
+                                }
+                                <div class="text-slate-400 small mt-1">
+                                    Opcional. Dejalo vacío para usar OpenAI. También sirve para proveedores compatibles con OpenAI, por ejemplo Groq: <code class="text-cyan-300">https://api.groq.com/openai/v1</code>
+                                </div>
+                            </div>
+                        }
                     </div>
                 </div>
             }
@@ -124,7 +138,7 @@
                         <span>Guardar Configuración</span>
                     }
                 </button>
-                <small class="text-slate-400">La configuración se simula por ahora y queda lista para persistencia real.</small>
+                <small class="text-slate-400">Los cambios se aplican en el próximo diagnóstico.</small>
             </div>
 
             @if (ShowToast)
@@ -140,6 +154,12 @@
                     @(SelectedProvider == ModelProvider.AzureOpenAI
                         ? "Completá API Key, Deployment / Model ID y Endpoint antes de guardar la configuración."
                         : "Completá API Key y Model ID antes de guardar la configuración.")
+                </div>
+            }
+            else if (ShowValidationErrors && OpenAIEndpointError is not null)
+            {
+                <div class="mt-4 alert alert-danger">
+                    Corregí el Endpoint antes de guardar la configuración: @OpenAIEndpointError
                 </div>
             }
         </div>
@@ -168,6 +188,13 @@
         (string.IsNullOrWhiteSpace(ApiKey)
          || string.IsNullOrWhiteSpace(ModelId)
          || (SelectedProvider == ModelProvider.AzureOpenAI && string.IsNullOrWhiteSpace(Endpoint)));
+
+    // Optional custom endpoint for OpenAI-compatible providers (Groq, local models). Null when valid or empty.
+    private string? OpenAIEndpointError =>
+        SelectedProvider == ModelProvider.OpenAI
+        && !SmartOps.Web.Services.OpenAICompatibleEndpointValidator.TryValidate(Endpoint, out _, out var error)
+            ? error
+            : null;
     private bool ShowApiKey;
     private bool IsSaving;
     private bool ShowToast;
@@ -224,7 +251,7 @@
     {
         ShowValidationErrors = true;
 
-        if (HasMissingRequiredFields)
+        if (HasMissingRequiredFields || OpenAIEndpointError is not null)
         {
             StateHasChanged();
             return;
@@ -248,7 +275,7 @@
             pK.Value = "Integrations.Provider"; pV.Value = SelectedProvider.ToString(); cmd.ExecuteNonQuery();
             pK.Value = "Integrations.ApiKey"; pV.Value = ApiKey ?? string.Empty; cmd.ExecuteNonQuery();
             pK.Value = "Integrations.ModelId"; pV.Value = ModelId ?? string.Empty; cmd.ExecuteNonQuery();
-            pK.Value = "Integrations.Endpoint"; pV.Value = Endpoint ?? string.Empty; cmd.ExecuteNonQuery();
+            pK.Value = "Integrations.Endpoint"; pV.Value = Endpoint?.Trim() ?? string.Empty; cmd.ExecuteNonQuery();
 
             tran.Commit();
             ShowToast = true;

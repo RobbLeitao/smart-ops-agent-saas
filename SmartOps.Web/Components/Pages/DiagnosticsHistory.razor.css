@@ -69,8 +69,6 @@
 .dark-panel .btn-ia .bi { color: #ffffff !important; }
 .dark-panel .btn-ia:hover { background: #4a43d1 !important; }
 
-.copy-btn { width: 140px; min-width: 140px; justify-content: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.copy-btn .bi { margin-right: 8px; }
 
 .dark-panel { background: #171c26; color: #e6eef8; }
 .dark-panel p, .dark-panel small, .dark-panel h4, .dark-panel h5, .dark-panel li { color: #e6eef8; }
