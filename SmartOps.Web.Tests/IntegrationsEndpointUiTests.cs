@@ -31,6 +31,7 @@ namespace SmartOps.Web.Tests
             }
 
             _ctx.Services.AddScoped(_ => new AppDbContext(_options));
+            _ctx.Services.AddScoped<IntegrationSettingsStore>();
         }
 
         public void Dispose()
@@ -100,9 +101,9 @@ namespace SmartOps.Web.Tests
             var cut = RenderWithOpenAI(endpoint);
             ClickSave(cut);
 
-            cut.WaitForAssertion(() => Assert.Equal(endpoint, ReadSetting("Integrations.Endpoint")));
+            cut.WaitForAssertion(() => Assert.Equal(endpoint, ReadSetting("Integrations.OpenAI.Endpoint")));
             Assert.Equal("OpenAI", ReadSetting("Integrations.Provider"));
-            Assert.Equal("llama-3.3-70b-versatile", ReadSetting("Integrations.ModelId"));
+            Assert.Equal("llama-3.3-70b-versatile", ReadSetting("Integrations.OpenAI.ModelId"));
         }
 
         [Theory]
@@ -116,7 +117,7 @@ namespace SmartOps.Web.Tests
             Assert.Contains(expectedError, cut.Markup);
             Assert.Contains("is-invalid", cut.Find("input[placeholder='https://api.groq.com/openai/v1']").ClassName);
             Assert.Null(ReadSetting("Integrations.Provider"));
-            Assert.Null(ReadSetting("Integrations.Endpoint"));
+            Assert.Null(ReadSetting("Integrations.OpenAI.Endpoint"));
         }
 
         [Fact]
@@ -124,14 +125,14 @@ namespace SmartOps.Web.Tests
         {
             using (var db = new AppDbContext(_options))
             {
-                db.Database.ExecuteSqlRaw("INSERT OR REPLACE INTO Settings (Key,Value) VALUES ('Integrations.Endpoint', 'https://api.groq.com/openai/v1');");
+                db.Database.ExecuteSqlRaw("INSERT OR REPLACE INTO Settings (Key,Value) VALUES ('Integrations.OpenAI.Endpoint', 'https://api.groq.com/openai/v1');");
             }
 
             var cut = RenderWithOpenAI(string.Empty);
             ClickSave(cut);
 
             cut.WaitForAssertion(() => Assert.Equal("OpenAI", ReadSetting("Integrations.Provider")));
-            Assert.Equal(string.Empty, ReadSetting("Integrations.Endpoint"));
+            Assert.Equal(string.Empty, ReadSetting("Integrations.OpenAI.Endpoint"));
         }
 
         [Fact]

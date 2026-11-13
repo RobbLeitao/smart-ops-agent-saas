@@ -35,10 +35,6 @@ namespace SmartOps.Web.Services
     /// </summary>
     public sealed class AIOpsService : IAIOpsService
     {
-        private const string ProviderKey = "Integrations.Provider";
-        private const string ApiKeyKey = "Integrations.ApiKey";
-        private const string ModelIdKey = "Integrations.ModelId";
-        private const string EndpointKey = "Integrations.Endpoint";
         private const string DefaultModelId = "gpt-4o";
 
         // Artificial "thinking" delay applied only to the Local Simulator path below, so the AI diagnostic
@@ -198,36 +194,20 @@ namespace SmartOps.Web.Services
 
             try
             {
-                var conn = _db.Database.GetDbConnection();
-                if (conn.State != ConnectionState.Open) conn.Open();
-
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = "SELECT Value FROM Settings WHERE Key = @k LIMIT 1";
-                var param = cmd.CreateParameter();
-                param.ParameterName = "@k";
-                cmd.Parameters.Add(param);
-
-                string? Read(string key)
-                {
-                    param.Value = key;
-                    return cmd.ExecuteScalar() as string;
-                }
-
-                var provider = Read(ProviderKey);
-                var apiKey = Read(ApiKeyKey) ?? string.Empty;
-                var modelId = Read(ModelIdKey);
-                var endpoint = Read(EndpointKey);
+                // Per-provider credentials (IntegrationSettingsStore): the active provider's own values only.
+                var active = new IntegrationSettingsStore(_db).ReadActive();
+                var c = active.Credentials;
 
                 return new IntegrationSettings(
-                    provider,
-                    apiKey,
-                    string.IsNullOrWhiteSpace(modelId) ? DefaultModelId : modelId,
-                    string.IsNullOrWhiteSpace(endpoint) ? null : endpoint);
+                    active.Provider,
+                    c.ApiKey,
+                    string.IsNullOrWhiteSpace(c.ModelId) ? DefaultModelId : c.ModelId,
+                    string.IsNullOrWhiteSpace(c.Endpoint) ? null : c.Endpoint);
             }
             catch (Exception ex)
             {
                 // Settings table may not exist yet (fresh DB / test providers): treat as unconfigured.
-                Console.Error.WriteLine($"Failed reading integrations settings for AI: {ex.Message}");
+                Console.Error.WriteLine($"Failed reading integrations settings for AI: {ex.GetType().Name}");
                 return empty;
             }
         }

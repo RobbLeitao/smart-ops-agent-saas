@@ -253,9 +253,9 @@ namespace SmartOps.Web.Tests
             void Set(string key, string value) => db.Database.ExecuteSqlRaw(
                 "INSERT OR REPLACE INTO Settings (Key,Value) VALUES ({0}, {1});", key, value);
             Set("Integrations.Provider", provider);
-            Set("Integrations.ApiKey", apiKey);
-            Set("Integrations.ModelId", modelId);
-            if (endpoint != null) Set("Integrations.Endpoint", endpoint);
+            Set(IntegrationSettingsStore.Key(IntegrationSettingsStore.Normalize(provider), "ApiKey"), apiKey);
+            Set(IntegrationSettingsStore.Key(IntegrationSettingsStore.Normalize(provider), "ModelId"), modelId);
+            if (endpoint != null) Set(IntegrationSettingsStore.Key(IntegrationSettingsStore.Normalize(provider), "Endpoint"), endpoint);
             return db;
         }
 

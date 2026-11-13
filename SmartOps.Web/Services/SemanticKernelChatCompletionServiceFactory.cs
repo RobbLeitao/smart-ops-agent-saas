@@ -38,7 +38,7 @@ namespace SmartOps.Web.Services
                 if (string.IsNullOrWhiteSpace(endpoint))
                 {
                     throw new ArgumentException(
-                        "Azure OpenAI requiere un endpoint configurado (Integrations.Endpoint o AI:Endpoint / AZURE_OPENAI_ENDPOINT).",
+                        "Azure OpenAI requiere un endpoint configurado en Integraciones.",
                         nameof(endpoint));
                 }
 

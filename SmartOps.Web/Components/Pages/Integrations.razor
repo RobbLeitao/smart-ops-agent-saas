@@ -4,7 +4,7 @@
 @using SmartOps.Infrastructure.Data
 @using SmartOps.Core.Entities
 @using Microsoft.EntityFrameworkCore
-@inject AppDbContext Db
+@inject SmartOps.Web.Services.IntegrationSettingsStore Store
 
 <div class="py-5" style="background-color:transparent;">
     <div class="container-fluid">
@@ -178,7 +178,7 @@
 
     private ModelProvider SelectedProvider = ModelProvider.Local;
     private string ApiKey = string.Empty;
-    private string ModelId = "gpt-4o";
+    private string ModelId = string.Empty;
     private string Endpoint = string.Empty;
 
     private bool IsRealProvider => SelectedProvider is ModelProvider.OpenAI or ModelProvider.AzureOpenAI;
@@ -205,13 +205,29 @@
     private string ProviderCardClass(ModelProvider provider)
         => $"integration-card {(SelectedProvider == provider ? "active" : string.Empty)}";
 
+    // Each real provider keeps its own values: switching shows that provider's draft, never the other one's.
+    private readonly Dictionary<ModelProvider, SmartOps.Web.Services.ProviderCredentials> _drafts = new();
+
+    private void StashDraft()
+    {
+        if (IsRealProvider) _drafts[SelectedProvider] = new(ApiKey, ModelId, Endpoint);
+    }
+
+    private void LoadDraft(ModelProvider provider)
+    {
+        var c = _drafts.TryGetValue(provider, out var d) ? d : SmartOps.Web.Services.ProviderCredentials.Empty;
+        ApiKey = c.ApiKey;
+        ModelId = c.ModelId;
+        Endpoint = c.Endpoint;
+    }
+
     private void SelectProvider(ModelProvider provider)
     {
+        if (provider == SelectedProvider) return;
+        StashDraft();
         SelectedProvider = provider;
-        if (provider == ModelProvider.Local)
-        {
-            ShowValidationErrors = false;
-        }
+        LoadDraft(provider);
+        ShowValidationErrors = false;
     }
 
     private void ToggleApiKeyVisibility()
@@ -219,31 +235,20 @@
         ShowApiKey = !ShowApiKey;
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        // Load saved settings from DB (Settings key-value)
         try
         {
-            using var conn = Db.Database.GetDbConnection();
-            if (conn.State != System.Data.ConnectionState.Open) conn.Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT Value FROM Settings WHERE Key = @k";
-            var p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.Provider"; cmd.Parameters.Add(p);
-            var val = cmd.ExecuteScalar() as string;
-            if (!string.IsNullOrWhiteSpace(val) && Enum.TryParse<ModelProvider>(val, out var prov)) SelectedProvider = prov;
-
-            cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.ApiKey"; cmd.Parameters.Add(p);
-            val = cmd.ExecuteScalar() as string; if (!string.IsNullOrWhiteSpace(val)) ApiKey = val;
-
-            cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.ModelId"; cmd.Parameters.Add(p);
-            val = cmd.ExecuteScalar() as string; if (!string.IsNullOrWhiteSpace(val)) ModelId = val;
-
-            cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.Endpoint"; cmd.Parameters.Add(p);
-            val = cmd.ExecuteScalar() as string; if (!string.IsNullOrWhiteSpace(val)) Endpoint = val;
+            foreach (var provider in new[] { ModelProvider.OpenAI, ModelProvider.AzureOpenAI })
+            {
+                _drafts[provider] = Store.Read(provider.ToString());
+            }
+            SelectedProvider = Enum.Parse<ModelProvider>(Store.ReadActiveProvider());
+            LoadDraft(SelectedProvider);
         }
         catch
         {
-            // ignore load errors
+            // Settings table missing (fresh DB): start empty.
         }
     }
 
@@ -263,27 +268,14 @@
 
         try
         {
-            using var conn = Db.Database.GetDbConnection();
-            if (conn.State != System.Data.ConnectionState.Open) conn.Open();
-            using var tran = conn.BeginTransaction();
-            using var cmd = conn.CreateCommand();
-            cmd.Transaction = tran;
-            cmd.CommandText = "INSERT OR REPLACE INTO Settings (Key,Value) VALUES (@k,@v);";
-            var pK = cmd.CreateParameter(); pK.ParameterName = "@k"; cmd.Parameters.Add(pK);
-            var pV = cmd.CreateParameter(); pV.ParameterName = "@v"; cmd.Parameters.Add(pV);
-
-            pK.Value = "Integrations.Provider"; pV.Value = SelectedProvider.ToString(); cmd.ExecuteNonQuery();
-            pK.Value = "Integrations.ApiKey"; pV.Value = ApiKey ?? string.Empty; cmd.ExecuteNonQuery();
-            pK.Value = "Integrations.ModelId"; pV.Value = ModelId ?? string.Empty; cmd.ExecuteNonQuery();
-            pK.Value = "Integrations.Endpoint"; pV.Value = Endpoint?.Trim() ?? string.Empty; cmd.ExecuteNonQuery();
-
-            tran.Commit();
+            Store.Save(SelectedProvider.ToString(), IsRealProvider ? new SmartOps.Web.Services.ProviderCredentials(ApiKey, ModelId, Endpoint) : null);
+            StashDraft();
             ShowToast = true;
             ShowValidationErrors = false;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Failed to save integrations settings: {ex}");
+            Console.Error.WriteLine($"Failed to save integrations settings: {ex.GetType().Name}");
         }
         finally
         {

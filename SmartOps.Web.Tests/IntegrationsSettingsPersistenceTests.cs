@@ -3,10 +3,12 @@ using System.Data.Common;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using SmartOps.Infrastructure.Data;
+using SmartOps.Web.Services;
 using Xunit;
 
 namespace SmartOps.Web.Tests
 {
+    /// <summary>Per-provider integrations settings (IntegrationSettingsStore) and the legacy-keys migration.</summary>
     public sealed class IntegrationsSettingsPersistenceTests : IDisposable
     {
         private readonly DbConnection _connection;
@@ -14,72 +16,128 @@ namespace SmartOps.Web.Tests
 
         public IntegrationsSettingsPersistenceTests()
         {
-            // Use a real in-memory SQLite connection so we can execute SQL commands that rely on a real DB
             _connection = new SqliteConnection("DataSource=:memory:");
             _connection.Open();
 
-            _options = new DbContextOptionsBuilder<AppDbContext>()
-                .UseSqlite(_connection)
-                .Options;
+            _options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_connection).Options;
 
             using var db = new AppDbContext(_options);
             db.Database.EnsureCreated();
-            // create Settings table as the app does at startup
             db.Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS Settings (Key TEXT PRIMARY KEY, Value TEXT);");
         }
 
-        [Fact]
-        public void SaveAndLoad_IntegrationsSettings()
+        public void Dispose() => _connection.Dispose();
+
+        private IntegrationSettingsStore Store() => new(new AppDbContext(_options));
+
+        private void Set(string key, string value)
         {
-            // Ensure Settings table exists by executing directly on the shared connection
-            using (var ensureCmd = _connection.CreateCommand())
-            {
-                ensureCmd.CommandText = "CREATE TABLE IF NOT EXISTS Settings (Key TEXT PRIMARY KEY, Value TEXT);";
-                ensureCmd.ExecuteNonQuery();
-            }
-
-            // Insert keys using the shared connection directly
-            using (var tran = _connection.BeginTransaction())
-            {
-                using var cmd = _connection.CreateCommand();
-                cmd.Transaction = tran;
-                cmd.CommandText = "INSERT OR REPLACE INTO Settings (Key,Value) VALUES (@k,@v);";
-                var pK = cmd.CreateParameter(); pK.ParameterName = "@k"; cmd.Parameters.Add(pK);
-                var pV = cmd.CreateParameter(); pV.ParameterName = "@v"; cmd.Parameters.Add(pV);
-
-                pK.Value = "Integrations.Provider"; pV.Value = "OpenAI"; cmd.ExecuteNonQuery();
-                pK.Value = "Integrations.ApiKey"; pV.Value = "sk-test"; cmd.ExecuteNonQuery();
-                pK.Value = "Integrations.ModelId"; pV.Value = "gpt-4o"; cmd.ExecuteNonQuery();
-                pK.Value = "Integrations.Endpoint"; pV.Value = "https://api.groq.com/openai/v1"; cmd.ExecuteNonQuery();
-
-                tran.Commit();
-            }
-
-            // Read back using the shared connection
-            using (var cmd = _connection.CreateCommand())
-            {
-                cmd.CommandText = "SELECT Value FROM Settings WHERE Key = @k LIMIT 1";
-                var p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.Provider"; cmd.Parameters.Add(p);
-                var prov = cmd.ExecuteScalar() as string;
-                Assert.Equal("OpenAI", prov);
-
-                cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.ApiKey"; cmd.Parameters.Add(p);
-                var key = cmd.ExecuteScalar() as string;
-                Assert.Equal("sk-test", key);
-
-                cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.ModelId"; cmd.Parameters.Add(p);
-                var model = cmd.ExecuteScalar() as string;
-                Assert.Equal("gpt-4o", model);
-
-                cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.Endpoint"; cmd.Parameters.Add(p);
-                var endpoint = cmd.ExecuteScalar() as string;
-                Assert.Equal("https://api.groq.com/openai/v1", endpoint);
-            }
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "INSERT OR REPLACE INTO Settings (Key,Value) VALUES (@k,@v);";
+            var k = cmd.CreateParameter(); k.ParameterName = "@k"; k.Value = key; cmd.Parameters.Add(k);
+            var v = cmd.CreateParameter(); v.ParameterName = "@v"; v.Value = value; cmd.Parameters.Add(v);
+            cmd.ExecuteNonQuery();
         }
 
-        public void Dispose()
+        private string? Get(string key)
         {
-            _connection?.Dispose();
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT Value FROM Settings WHERE Key = @k";
+            var k = cmd.CreateParameter(); k.ParameterName = "@k"; k.Value = key; cmd.Parameters.Add(k);
+            return cmd.ExecuteScalar() as string;
+        }
+
+        private long CountLegacy()
+        {
+            using var cmd = _connection.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM Settings WHERE Key IN ('Integrations.ApiKey','Integrations.ModelId','Integrations.Endpoint')";
+            return (long)cmd.ExecuteScalar()!;
+        }
+
+        [Fact]
+        public void Save_ThenRead_EachProviderKeepsItsOwnValues()
+        {
+            Store().Save("OpenAI", new ProviderCredentials("gsk-test", "openai/gpt-oss-20b", "https://api.groq.com/openai/v1"));
+            Store().Save("AzureOpenAI", new ProviderCredentials("azure-test", "my-deployment", "https://contoso.openai.azure.com/"));
+
+            var openAi = Store().Read("OpenAI");
+            var azure = Store().Read("AzureOpenAI");
+
+            Assert.Equal(new ProviderCredentials("gsk-test", "openai/gpt-oss-20b", "https://api.groq.com/openai/v1"), openAi);
+            Assert.Equal(new ProviderCredentials("azure-test", "my-deployment", "https://contoso.openai.azure.com/"), azure);
+            Assert.Equal("AzureOpenAI", Store().ReadActiveProvider());
+            Assert.Equal("azure-test", Store().ReadActive().Credentials.ApiKey);
+        }
+
+        [Fact]
+        public void SaveLocal_KeepsRealProvidersCredentials()
+        {
+            Store().Save("OpenAI", new ProviderCredentials("gsk-test", "m", ""));
+            Store().Save("Local", null);
+
+            Assert.Equal("Local", Get("Integrations.Provider"));
+            Assert.Equal("gsk-test", Store().Read("OpenAI").ApiKey);
+            Assert.Equal(ProviderCredentials.Empty, Store().ReadActive().Credentials);
+        }
+
+        [Fact]
+        public void ReadActive_NothingConfigured_ProviderIsNull()
+        {
+            var active = Store().ReadActive();
+            Assert.Null(active.Provider);
+            Assert.Equal(ProviderCredentials.Empty, active.Credentials);
+        }
+
+        [Fact]
+        public void MigrateLegacy_MovesValuesToActiveProvider_DeletesLegacy_AndIsIdempotent()
+        {
+            Set("Integrations.Provider", "OpenAI");
+            Set("Integrations.ApiKey", "gsk-legacy");
+            Set("Integrations.ModelId", "openai/gpt-oss-20b");
+            Set("Integrations.Endpoint", "https://api.groq.com/openai/v1");
+
+            Assert.Equal(3, IntegrationSettingsStore.MigrateLegacy(_connection));
+
+            Assert.Equal(0, CountLegacy());
+            Assert.Equal("gsk-legacy", Get("Integrations.OpenAI.ApiKey"));
+            Assert.Equal("openai/gpt-oss-20b", Get("Integrations.OpenAI.ModelId"));
+            Assert.Equal("https://api.groq.com/openai/v1", Get("Integrations.OpenAI.Endpoint"));
+            Assert.Null(Get("Integrations.AzureOpenAI.ApiKey"));
+
+            // Second run: nothing left to migrate, values unchanged.
+            Assert.Equal(0, IntegrationSettingsStore.MigrateLegacy(_connection));
+            Assert.Equal("gsk-legacy", Get("Integrations.OpenAI.ApiKey"));
+        }
+
+        [Fact]
+        public void MigrateLegacy_NeverOverwritesExistingPerProviderValues()
+        {
+            Set("Integrations.Provider", "OpenAI");
+            Set("Integrations.OpenAI.ApiKey", "gsk-new");
+            Set("Integrations.ApiKey", "gsk-old");
+
+            IntegrationSettingsStore.MigrateLegacy(_connection);
+
+            Assert.Equal("gsk-new", Get("Integrations.OpenAI.ApiKey"));
+            Assert.Equal(0, CountLegacy());
+        }
+
+        [Theory]
+        [InlineData("AzureOpenAI", "https://x.example.com/", "AzureOpenAI")]
+        [InlineData("Local", "https://contoso.openai.azure.com/", "AzureOpenAI")]
+        [InlineData("Local", "https://api.groq.com/openai/v1", "OpenAI")]
+        [InlineData(null, "", "OpenAI")]
+        public void MigrateLegacy_TargetProviderRule(string? active, string endpoint, string expectedTarget)
+        {
+            if (active != null) Set("Integrations.Provider", active);
+            Set("Integrations.ApiKey", "k");
+            Set("Integrations.Endpoint", endpoint);
+
+            IntegrationSettingsStore.MigrateLegacy(_connection);
+
+            Assert.Equal("k", Get($"Integrations.{expectedTarget}.ApiKey"));
+            Assert.Equal(endpoint, Get($"Integrations.{expectedTarget}.Endpoint"));
+            Assert.Equal(0, CountLegacy());
         }
     }
 }

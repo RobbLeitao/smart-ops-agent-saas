@@ -176,6 +176,7 @@ builder.Services.AddScoped<SmartOps.Web.Services.TransactionDrawerService>();
 builder.Services.AddScoped<SmartOps.Web.Services.DbContextGate>();
 builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticFeedbackService>();
 builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticReportService>();
+builder.Services.AddScoped<SmartOps.Web.Services.IntegrationSettingsStore>();
 // Ensure HubContext is available via SignalR server support; SignalR is included in ASP.NET Core
 builder.Services.AddSignalR();
 
@@ -370,6 +371,19 @@ using (var scope = app.Services.CreateScope())
         catch
         {
             // ignore
+        }
+
+        // Integrations: move the legacy global ApiKey/ModelId/Endpoint keys to the per-provider ones
+        // (idempotent; the app does not apply EF migrations, so this runs as plain SQL at startup).
+        try
+        {
+            SmartOps.Web.Services.IntegrationSettingsStore.MigrateLegacy(
+                db.Database.GetDbConnection(),
+                scope.ServiceProvider.GetService<ILoggerFactory>()?.CreateLogger("IntegrationsMigration"));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Integrations settings migration failed: {ex.GetType().Name}");
         }
     }
     catch
