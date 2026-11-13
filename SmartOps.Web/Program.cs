@@ -181,9 +181,8 @@ builder.Services.AddSingleton<SmartOps.Web.Services.IAiConnectionTester, SmartOp
 // Ensure HubContext is available via SignalR server support; SignalR is included in ASP.NET Core
 builder.Services.AddSignalR();
 
-// Enable verbose SignalR logging to surface InvalidDataException stack traces in Output window
-builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR", LogLevel.Debug);
-builder.Logging.AddFilter("Microsoft.AspNetCore.Http.Connections", LogLevel.Debug);
+// SignalR/Blazor circuit logging stays at the configured level (Warning). Debug level logs every hub
+// invocation with its arguments, i.e. the values typed in forms (passwords, API keys).
 
 // Register transaction publisher provider based on configuration (Simulator | External)
 var txSection = builder.Configuration.GetSection("TransactionSettings");
