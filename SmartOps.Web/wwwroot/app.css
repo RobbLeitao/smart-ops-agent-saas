@@ -7,6 +7,7 @@
     --surface: #111418;
     --surface-sunken: #0e1114;
     --surface-raised: #1c2026;
+    --surface-selected: #232934;
     --border: #22262d;
     --border-subtle: #1c2026;
     --border-strong: #2c313a;
@@ -374,29 +375,6 @@ a, .btn-link {
     color: #cbd5e1;
 }
 
-.feedback-btn {
-    background: #11151b;
-    color: #e2e8f0;
-    border: 1px solid rgba(148,163,184,0.18);
-    border-radius: 0.75rem;
-    padding: 0.45rem 0.85rem;
-}
-
-.feedback-btn:hover {
-    color: #f8fafc;
-    border-color: rgba(103,232,249,0.32);
-}
-
-.feedback-btn.active {
-    background: #13233a;
-    color: #67e8f9;
-    border-color: rgba(103,232,249,0.5);
-}
-
-.feedback-btn:disabled {
-    opacity: 0.85;
-}
-
 /* shutterIn animation for result panel */
 @keyframes shutterIn {
   0% { transform-origin: top; transform: scaleY(0); opacity: 0; }
@@ -451,37 +429,6 @@ a, .btn-link {
     border-radius: 0.75rem;
 }
 
-/* Diagnostics History tab: stretch the card + grid down to fill the available viewport
-   height (instead of shrink-wrapping to content), leaving a small margin below, so there's
-   no big empty gap under the table. The chain below uses a real "height" (not min-height)
-   at the top so descendant flex items get a definite size to grow/shrink into — with
-   min-height:0 at every level so the table's own overflow-y:auto kicks in instead of the
-   whole page growing past the viewport. Scoped to this page only (class names are unique).
-   96px approximates the header bar's rendered height plus a small safety margin. */
-.diag-history-shell {
-    display: flex;
-    flex-direction: column;
-    height: calc(100vh - 123px);
-    overflow: hidden;
-}
-.diag-history-container {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-}
-.diag-history-card {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-}
-.diag-history-table {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-}
-
 .shadow-lg { box-shadow: 0 8px 24px rgba(2,6,23,0.6); }
 .border-gray-200 { border-color: rgba(229,231,235,0.04); }
 
@@ -513,45 +460,6 @@ a, .btn-link {
     color: #e6eef8;
     line-height: 1.6;
 }
-
-/* Clases .dashboard-* que todavía usa el Historial (DiagnosticsHistory.razor). Se van con el
-   rediseño del Historial (bloque 3). El Dashboard ya tiene su propio Dashboard.razor.css. */
-.dashboard-chart-title {
-    margin: 0;
-    color: #f8fafc;
-    font-size: 1.05rem;
-}
-
-.dashboard-chart-copy {
-    color: #94a3b8;
-    font-size: 0.9rem;
-}
-
-.dashboard-filter {
-    width: min(100%, 320px);
-}
-
-.dashboard-filter-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    width: min(100%, 420px);
-}
-
-.dashboard-inline-toggle {
-    display: inline-flex;
-    align-items: center;
-    min-width: 2.75rem;
-    padding-left: 0.25rem;
-}
-
-@media (max-width: 767.98px) {
-    .dashboard-filter-row {
-        width: 100%;
-    }
-}
-
 
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
     box-shadow: none;

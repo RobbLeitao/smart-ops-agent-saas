@@ -1,6 +1,7 @@
 @using System.Globalization
 @using SmartOps.Core.Entities
 @using SmartOps.Web.Services
+@using SmartOps.Web.Components.Shared
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Components.Authorization
 @inject TransactionDrawerService DrawerService
@@ -93,40 +94,7 @@
                             break;
 
                         case DiagState.Ready when _diagnostic is not null:
-                            @if (_sections is { HasSections: true })
-                            {
-                                @if (!string.IsNullOrWhiteSpace(_sections.WhatHappened))
-                                {
-                                    <div class="drawer-block">
-                                        <h4 class="drawer-overline">Qué pasó</h4>
-                                        <div class="drawer-md">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections.WhatHappened))</div>
-                                    </div>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(_sections.WhatToDo))
-                                {
-                                    <div class="drawer-block">
-                                        <h4 class="drawer-overline">Qué hacer</h4>
-                                        <div class="drawer-md drawer-steps">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections.WhatToDo))</div>
-                                    </div>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(_sections.Other))
-                                {
-                                    <div class="drawer-block drawer-md drawer-other">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections.Other))</div>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(_sections.CustomerMessage))
-                                {
-                                    <div class="drawer-block drawer-block-message">
-                                        <h4 class="drawer-overline">Mensaje para el cliente</h4>
-                                        <div class="drawer-message drawer-md">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections.CustomerMessage))</div>
-                                        <CopySuggestedMessageButton Markdown="@_diagnostic.Markdown" Label="Copiar mensaje" Compact="true" />
-                                    </div>
-                                }
-                            }
-                            else
-                            {
-                                @* Sin secciones reconocibles: el Markdown completo, renderizado (nunca crudo). *@
-                                <div class="drawer-md">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections?.FullMarkdown ?? _diagnostic.Markdown))</div>
-                            }
+                            <DiagnosticSections Markdown="@_diagnostic.Markdown" />
 
                             @if (_diagnostic.Id != Guid.Empty)
                             {
@@ -191,7 +159,6 @@
     private TransactionDto? _dto;
     private DiagState _state = DiagState.Loading;
     private Diagnostic? _diagnostic;
-    private DiagnosticSections? _sections;
     private string? _errorMessage;
     private bool? _userVote;
     private bool _savingVote;
@@ -253,7 +220,6 @@
         var wasOpen = _dto != null;
         _dto = dto;
         _diagnostic = null;
-        _sections = null;
         _errorMessage = null;
         _userVote = null;
         _savingVote = false;
@@ -311,7 +277,6 @@
     private async Task ShowDiagnosticAsync(Diagnostic diagnostic, int version)
     {
         _diagnostic = diagnostic;
-        _sections = DiagnosticSectionParser.Parse(diagnostic.Markdown);
         _state = DiagState.Ready;
         StateHasChanged();
 
@@ -340,7 +305,6 @@
         _state = DiagState.Analyzing;
         _errorMessage = null;
         _diagnostic = null;
-        _sections = null;
         StateHasChanged();
 
         var minVisible = Task.Delay(MinAnalyzingVisibleDuration);

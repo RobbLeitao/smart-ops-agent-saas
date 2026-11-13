@@ -28,6 +28,7 @@ Este sistema sale del rediseño del Dashboard (dirección C: estructura espaciad
 | Superficie | `surface` + `border` | tarjetas, paneles, tablas, drawer |
 | Hundido | `surface-sunken` | encabezado de tabla, inputs |
 | Elevado | `surface-raised` | pestaña activa, hover, pista de barras |
+| Seleccionado | `surface-selected` | fila seleccionada; más clara que el hover |
 | Texto | `text` / `text-muted` | principal / secundario |
 | Falla | `danger` | punto de estado, badge, errores |
 | Aprobado, en vivo | `success` | punto de estado |

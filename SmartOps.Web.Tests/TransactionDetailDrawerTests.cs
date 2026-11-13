@@ -146,11 +146,11 @@ public sealed class TransactionDetailDrawerTests
         // 3 · Listo: chip, secciones, Copiar y voto.
         h.Cut.WaitForAssertion(() => Assert.Equal("ready", h.State), Wait);
         Assert.StartsWith("Listo ·", h.Cut.Find(".status-chip-ready").TextContent.Trim());
-        var titles = h.Cut.FindAll(".drawer-overline").Select(e => e.TextContent).ToArray();
+        var titles = h.Cut.FindAll(".diag-overline").Select(e => e.TextContent).ToArray();
         Assert.Equal(new[] { "Qué pasó", "Qué hacer", "Mensaje para el cliente" }, titles);
-        Assert.Equal(2, h.Cut.FindAll(".drawer-steps ol li").Count);
-        Assert.Contains("tu pago fue rechazado", h.Cut.Find(".drawer-message").TextContent);
-        Assert.Contains("Copiar mensaje", h.Cut.Find(".drawer-block-message button").TextContent);
+        Assert.Equal(2, h.Cut.FindAll(".diag-steps ol li").Count);
+        Assert.Contains("tu pago fue rechazado", h.Cut.Find(".diag-message").TextContent);
+        Assert.Contains("Copiar mensaje", h.Cut.Find(".diag-block-message button").TextContent);
         Assert.Single(h.Db.Diagnostics);
 
         var yes = h.Cut.FindAll(".drawer-vote-btn").Single(b => b.TextContent == "Sí");
@@ -189,8 +189,8 @@ public sealed class TransactionDetailDrawerTests
             db.Diagnostics.Add(new Diagnostic { Id = Guid.NewGuid(), TransactionId = 1440, Markdown = "Falló por **fondos**.", CardLast4 = "3723" })).Open();
 
         h.Cut.WaitForAssertion(() => Assert.Equal("ready", h.State), Wait);
-        Assert.Empty(h.Cut.FindAll(".drawer-overline"));
-        Assert.Contains("<strong>fondos</strong>", h.Cut.Find(".drawer-diag .drawer-md").InnerHtml);
+        Assert.Empty(h.Cut.FindAll(".diag-overline"));
+        Assert.Contains("<strong>fondos</strong>", h.Cut.Find(".drawer-diag .diag-md").InnerHtml);
     }
 
     [Theory]

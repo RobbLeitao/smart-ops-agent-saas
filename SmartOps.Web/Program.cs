@@ -175,6 +175,7 @@ builder.Services.AddSingleton<SmartOps.Web.Services.TransactionNotifier>();
 builder.Services.AddScoped<SmartOps.Web.Services.TransactionDrawerService>();
 builder.Services.AddScoped<SmartOps.Web.Services.DbContextGate>();
 builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticFeedbackService>();
+builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticReportService>();
 // Ensure HubContext is available via SignalR server support; SignalR is included in ASP.NET Core
 builder.Services.AddSignalR();
 

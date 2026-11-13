@@ -116,8 +116,7 @@
     grid-column: span 2;
 }
 
-.drawer-field dt,
-.drawer-overline {
+.drawer-field dt {
     margin: 0;
     font-size: 12px;
     line-height: 16px;
@@ -233,75 +232,7 @@
     align-self: flex-start;
 }
 
-/* 3 · Listo */
-.drawer-block {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    animation: drawer-fade-in 180ms ease-out both;
-}
-
-.drawer-block-message {
-    gap: var(--space-2);
-}
-
-.drawer-md ::deep p {
-    margin: 0 0 var(--space-2);
-}
-
-.drawer-md ::deep p:last-child,
-.drawer-md ::deep ul:last-child,
-.drawer-md ::deep ol:last-child {
-    margin-bottom: 0;
-}
-
-.drawer-md ::deep ul,
-.drawer-md ::deep ol {
-    margin: 0 0 var(--space-2);
-    padding-left: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.drawer-md ::deep h1,
-.drawer-md ::deep h2,
-.drawer-md ::deep h3,
-.drawer-md ::deep h4,
-.drawer-md ::deep h5,
-.drawer-md ::deep h6 {
-    margin: var(--space-2) 0 var(--space-1);
-    font-size: 12px;
-    line-height: 16px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-}
-
-.drawer-md ::deep blockquote {
-    margin: 0;
-    padding: 0;
-    border: none;
-}
-
-.drawer-md ::deep a {
-    color: var(--text);
-    text-decoration: underline;
-}
-
-.drawer-md ::deep code {
-    font-family: var(--font-mono);
-    color: var(--text);
-}
-
-.drawer-message {
-    background: var(--surface-sunken);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 14px var(--space-4);
-}
-
+/* 3 · Listo: las secciones las pinta DiagnosticSections (Components/Shared). */
 .drawer-vote {
     border-top: 1px solid var(--border);
     padding-top: var(--space-4);
@@ -394,8 +325,7 @@
         animation: none;
     }
 
-    .drawer-analyzing,
-    .drawer-block {
+    .drawer-analyzing {
         animation-duration: 100ms;
     }
 }
