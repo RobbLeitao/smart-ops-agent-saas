@@ -1,174 +1,164 @@
 @page "/integrations"
 @rendermode InteractiveServer
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Auditor")]
-@using SmartOps.Infrastructure.Data
-@using SmartOps.Core.Entities
-@using Microsoft.EntityFrameworkCore
-@inject AppDbContext Db
+@using SmartOps.Web.Services
+@inject IntegrationSettingsStore Store
+@inject IAiConnectionTester ConnectionTester
 
-<div class="py-5" style="background-color:transparent;">
-    <div class="container-fluid">
-        <div class="grid-dark p-4" style="background-color:#1e2330;">
-            <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
-                <div>
-                    <h2 class="mb-1 text-slate-100">Configuración de Integraciones</h2>
-                    <small class="text-slate-400">Ajustá el proveedor de IA y la orquestación del motor</small>
-                </div>
-                <span class="badge rounded-pill px-3 py-2" style="background:#13233a;color:#67e8f9;border:1px solid rgba(103,232,249,0.18);">
-                    Microsoft Semantic Kernel - Activo
-                </span>
-            </div>
+<PageTitle>Integraciones · SmartOps</PageTitle>
 
-            <div class="mb-4">
-                <div class="text-cyan-300 small mb-2">Orquestación</div>
-                <div class="p-3 rounded-4" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
-                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-                        <div>
-                            <div class="text-slate-100 fw-semibold">Motor principal</div>
-                            <div class="text-slate-400 small">La aplicación usa Semantic Kernel para enrutar prompts y herramientas.</div>
-                        </div>
-                        <span class="badge rounded-pill" style="background:#0f2a2c;color:#5eead4;border:1px solid rgba(94,234,212,0.18);">Activo</span>
-                    </div>
-                </div>
-            </div>
+@* Integraciones (docs/redesign/05-integraciones.html). *@
+<div class="intg">
+    <div>
+        <h1 class="intg-title">Integraciones</h1>
+        <p class="intg-subtitle">Elegí qué motor genera los diagnósticos. Los cambios se aplican en el próximo diagnóstico.</p>
+    </div>
 
-            <div class="mb-4">
-                <div class="text-cyan-300 small mb-3">Proveedor de IA</div>
-                <div class="row g-3">
-                    <div class="col-lg-4">
-                        <button class="@ProviderCardClass(ModelProvider.Local)" @onclick="() => SelectProvider(ModelProvider.Local)">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="text-slate-100 fw-semibold">Simulador Local</div>
-                                    <div class="text-slate-400 small">Costo $0 · Ideal para desarrollo y pruebas</div>
-                                </div>
-                                <span class="badge rounded-pill" style="background:#1f2937;color:#cbd5e1;">Recomendado</span>
-                            </div>
-                        </button>
-                    </div>
-                    <div class="col-lg-4">
-                        <button class="@ProviderCardClass(ModelProvider.OpenAI)" @onclick="() => SelectProvider(ModelProvider.OpenAI)">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="text-slate-100 fw-semibold">OpenAI API</div>
-                                    <div class="text-slate-400 small">Conecta el modelo real para producción</div>
-                                </div>
-                                <span class="badge rounded-pill" style="background:#13233a;color:#67e8f9;">Producción</span>
-                            </div>
-                        </button>
-                    </div>
-                    <div class="col-lg-4">
-                        <button class="@ProviderCardClass(ModelProvider.AzureOpenAI)" @onclick="() => SelectProvider(ModelProvider.AzureOpenAI)">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="text-slate-100 fw-semibold">Azure OpenAI</div>
-                                    <div class="text-slate-400 small">Deployment propio en Azure AI</div>
-                                </div>
-                                <span class="badge rounded-pill" style="background:#13233a;color:#67e8f9;">Producción</span>
-                            </div>
-                        </button>
-                    </div>
-                </div>
-            </div>
+    <form class="intg-form" novalidate @onsubmit="SaveConfigurationAsync">
+        <fieldset class="intg-providers">
+            <legend class="intg-legend">Proveedor de IA</legend>
 
-            @if (IsRealProvider)
+            @foreach (var option in ProviderOptions)
             {
-                <div class="mb-4 p-4 rounded-4" style="background:#171c26;border:1px solid rgba(148,163,184,0.14);">
-                    <div class="text-cyan-300 small mb-3">Credenciales</div>
-                    <div class="row g-3">
-                        <div class="col-lg-6">
-                            <label class="form-label text-slate-200">API Key <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <input class="form-control @(ShowValidationErrors && string.IsNullOrWhiteSpace(ApiKey) ? "is-invalid" : string.Empty)" type="@ApiKeyInputType" @bind="ApiKey" placeholder="sk-..." />
-                                <button class="btn btn-outline-secondary" type="button" @onclick="ToggleApiKeyVisibility">
-                                    @(ShowApiKey ? "Ocultar" : "Mostrar")
-                                </button>
-                            </div>
-                            @if (ShowValidationErrors && string.IsNullOrWhiteSpace(ApiKey))
-                            {
-                                <div class="text-danger small mt-1">La API Key es obligatoria.</div>
-                            }
-                        </div>
-                        <div class="col-lg-6">
-                            <label class="form-label text-slate-200">@(SelectedProvider == ModelProvider.AzureOpenAI ? "Deployment / Model ID" : "Model ID") <span class="text-danger">*</span></label>
-                            <input class="form-control @(ShowValidationErrors && string.IsNullOrWhiteSpace(ModelId) ? "is-invalid" : string.Empty)" @bind="ModelId" placeholder="gpt-4o" />
-                            @if (ShowValidationErrors && string.IsNullOrWhiteSpace(ModelId))
-                            {
-                                <div class="text-danger small mt-1">El Model ID es obligatorio.</div>
-                            }
-                        </div>
-                        @if (SelectedProvider == ModelProvider.AzureOpenAI)
-                        {
-                            <div class="col-12">
-                                <label class="form-label text-slate-200">Endpoint <span class="text-danger">*</span></label>
-                                <input class="form-control @(ShowValidationErrors && string.IsNullOrWhiteSpace(Endpoint) ? "is-invalid" : string.Empty)" @bind="Endpoint" placeholder="https://mi-recurso.openai.azure.com/" />
-                                @if (ShowValidationErrors && string.IsNullOrWhiteSpace(Endpoint))
-                                {
-                                    <div class="text-danger small mt-1">El endpoint de Azure OpenAI es obligatorio.</div>
-                                }
-                            </div>
-                        }
-                        @if (SelectedProvider == ModelProvider.OpenAI)
-                        {
-                            <div class="col-12">
-                                <label class="form-label text-slate-200">Endpoint <span class="text-slate-400 small">(opcional)</span></label>
-                                <input class="form-control @(ShowValidationErrors && OpenAIEndpointError is not null ? "is-invalid" : string.Empty)" @bind="Endpoint" placeholder="https://api.groq.com/openai/v1" />
-                                @if (ShowValidationErrors && OpenAIEndpointError is not null)
-                                {
-                                    <div class="text-danger small mt-1">@OpenAIEndpointError</div>
-                                }
-                                <div class="text-slate-400 small mt-1">
-                                    Opcional. Dejalo vacío para usar OpenAI. También sirve para proveedores compatibles con OpenAI, por ejemplo Groq: <code class="text-cyan-300">https://api.groq.com/openai/v1</code>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
+                var selected = SelectedProvider == option.Provider;
+                <label class="intg-option @(selected ? "is-selected" : null)" data-provider="@option.Provider">
+                    <input class="intg-radio" type="radio" name="provider" value="@option.Provider"
+                           checked="@selected" @onchange="() => SelectProvider(option.Provider)" />
+                    <span class="intg-option-body">
+                        <span class="intg-option-head">
+                            <span class="intg-option-name">@option.Name</span>
+                            <span class="intg-chip">@option.Chip</span>
+                        </span>
+                        <span class="intg-option-desc">@option.Description</span>
+                    </span>
+                </label>
             }
 
-            <div class="d-flex align-items-center gap-3 flex-wrap">
-                <button class="btn btn-ia px-4" @onclick="SaveConfigurationAsync" disabled="@IsSaving">
-                    @if (IsSaving)
+            <p class="intg-footnote">Orquestado con Microsoft Semantic Kernel.</p>
+        </fieldset>
+
+        <section class="intg-panel" aria-labelledby="cred-title">
+            <div class="intg-panel-head">
+                <h2 id="cred-title" class="intg-panel-title">@PanelTitle</h2>
+                <p class="intg-panel-note">Solo los Auditores ven y editan esta configuración.</p>
+            </div>
+
+            <div class="intg-panel-body">
+                @if (!IsRealProvider)
+                {
+                    <p class="intg-empty">El simulador no necesita credenciales.</p>
+                }
+                else
+                {
+                    <div class="ds-field">
+                        <label class="ds-label" for="intg-apikey">API key</label>
+                        <span class="ds-reveal">
+                            <input id="intg-apikey" class="ds-input mono" type="@(ShowApiKey ? "text" : "password")"
+                                   autocomplete="off" spellcheck="false"
+                                   aria-invalid="@(ApiKeyError is not null ? "true" : "false")"
+                                   aria-describedby="intg-apikey-help @(ApiKeyError is not null ? "intg-apikey-error" : null)"
+                                   @bind="ApiKey" @bind:after="OnFieldChanged" />
+                            <button type="button" class="ds-reveal-btn" aria-controls="intg-apikey" aria-pressed="@(ShowApiKey ? "true" : "false")"
+                                    @onclick="ToggleApiKeyVisibility">@(ShowApiKey ? "Ocultar" : "Mostrar")</button>
+                        </span>
+                        @if (ApiKeyError is not null)
+                        {
+                            <span id="intg-apikey-error" class="ds-error">@ApiKeyError</span>
+                        }
+                        <span id="intg-apikey-help" class="ds-help">Se muestra oculta por defecto. Nunca aparece en logs ni en mensajes de error.</span>
+                    </div>
+
+                    <div class="ds-field">
+                        <label class="ds-label" for="intg-model">@(IsAzure ? "Deployment / modelo" : "Modelo")</label>
+                        <input id="intg-model" class="ds-input mono" type="text" autocomplete="off" spellcheck="false"
+                               placeholder="@(IsAzure ? "nombre-del-deployment" : "gpt-4o")"
+                               aria-invalid="@(ModelIdError is not null ? "true" : "false")"
+                               aria-describedby="intg-model-help @(ModelIdError is not null ? "intg-model-error" : null)"
+                               @bind="ModelId" @bind:after="OnFieldChanged" />
+                        @if (ModelIdError is not null)
+                        {
+                            <span id="intg-model-error" class="ds-error">@ModelIdError</span>
+                        }
+                        <span id="intg-model-help" class="ds-help">
+                            @(IsAzure ? "El nombre del deployment en Azure AI Studio." : "El ID exacto que publica el proveedor, con prefijo si lo tiene.")
+                        </span>
+                    </div>
+
+                    <div class="ds-field">
+                        <label class="ds-label" for="intg-endpoint">Endpoint @if (!IsAzure) {<span class="ds-label-optional">(opcional)</span>}</label>
+                        <input id="intg-endpoint" class="ds-input mono" type="url" autocomplete="off" spellcheck="false"
+                               placeholder="@(IsAzure ? "https://mi-recurso.openai.azure.com/" : "https://api.openai.com/v1")"
+                               aria-invalid="@(EndpointError is not null ? "true" : "false")"
+                               aria-describedby="intg-endpoint-help @(EndpointError is not null ? "intg-endpoint-error" : null)"
+                               @bind="Endpoint" @bind:after="OnFieldChanged" />
+                        @if (EndpointError is not null)
+                        {
+                            <span id="intg-endpoint-error" class="ds-error">@EndpointError</span>
+                        }
+                        <span id="intg-endpoint-help" class="ds-help">
+                            @if (IsAzure)
+                            {
+                                <span>La URL del recurso de Azure OpenAI.</span>
+                            }
+                            else
+                            {
+                                <span>Vacío usa OpenAI. Para Groq: <span class="mono">https://api.groq.com/openai/v1</span></span>
+                            }
+                        </span>
+                    </div>
+                }
+
+                @if (TestResult is not null)
+                {
+                    if (TestResult.Ok)
                     {
-                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        <span>Guardando...</span>
+                        <div class="ds-alert ds-alert-success intg-result" role="status">
+                            <svg class="ds-alert-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+                            <span>Conexión correcta con <span class="mono">@TestedModel</span></span>
+                        </div>
                     }
                     else
                     {
-                        <span>Guardar Configuración</span>
+                        <div class="ds-alert ds-alert-danger intg-result" role="alert">
+                            <svg class="ds-alert-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.5"></path></svg>
+                            <span>@TestResult.Message</span>
+                        </div>
                     }
-                </button>
-                <small class="text-slate-400">Los cambios se aplican en el próximo diagnóstico.</small>
+                }
+
+                @if (Saved)
+                {
+                    <div class="ds-alert ds-alert-success intg-saved" role="status">
+                        <svg class="ds-alert-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>
+                        <span>Configuración guardada</span>
+                    </div>
+                }
+                else if (SaveFailed)
+                {
+                    <div class="ds-alert ds-alert-danger" role="alert">
+                        <svg class="ds-alert-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.5"></path></svg>
+                        <span>No pudimos guardar la configuración. Probá de nuevo.</span>
+                    </div>
+                }
             </div>
 
-            @if (ShowToast)
-            {
-                <div class="mt-4 toast-soft show">
-                    Configuración actualizada correctamente
-                </div>
-            }
-
-            @if (ShowValidationErrors && HasMissingRequiredFields)
-            {
-                <div class="mt-4 alert alert-danger">
-                    @(SelectedProvider == ModelProvider.AzureOpenAI
-                        ? "Completá API Key, Deployment / Model ID y Endpoint antes de guardar la configuración."
-                        : "Completá API Key y Model ID antes de guardar la configuración.")
-                </div>
-            }
-            else if (ShowValidationErrors && OpenAIEndpointError is not null)
-            {
-                <div class="mt-4 alert alert-danger">
-                    Corregí el Endpoint antes de guardar la configuración: @OpenAIEndpointError
-                </div>
-            }
-        </div>
-    </div>
+            <div class="intg-panel-foot">
+                @if (IsRealProvider)
+                {
+                    <button type="button" class="btn-ds btn-ds-secondary intg-test" disabled="@(IsTesting || IsSaving)" @onclick="TestConnectionAsync">
+                        @(IsTesting ? "Probando…" : "Probar conexión")
+                    </button>
+                }
+                <button type="submit" class="btn-ds btn-ds-primary intg-save" disabled="@(IsSaving || IsTesting)">
+                    @(IsSaving ? "Guardando…" : "Guardar cambios")
+                </button>
+            </div>
+        </section>
+    </form>
 </div>
 
 @code {
-    // Persisted as-is in Settings["Integrations.Provider"]; AIOpsService treats "OpenAI" and any value
-    // containing "azure" as real providers, anything else as the Local Simulator.
+    // Persisted as-is in Settings["Integrations.Provider"] (see IntegrationSettingsStore).
     private enum ModelProvider
     {
         Local,
@@ -176,122 +166,173 @@
         AzureOpenAI
     }
 
+    private sealed record ProviderOption(ModelProvider Provider, string Name, string Chip, string Description);
+
+    private static readonly ProviderOption[] ProviderOptions =
+    {
+        new(ModelProvider.Local, "Simulador local", "Gratis", "Respuestas de ejemplo sin llamar a ningún modelo. Para desarrollo y demos."),
+        new(ModelProvider.OpenAI, "OpenAI o compatible", "Modelo real", "OpenAI, Groq u otro proveedor con la misma API."),
+        new(ModelProvider.AzureOpenAI, "Azure OpenAI", "Modelo real", "Un deployment propio en Azure AI Studio."),
+    };
+
     private ModelProvider SelectedProvider = ModelProvider.Local;
     private string ApiKey = string.Empty;
-    private string ModelId = "gpt-4o";
+    private string ModelId = string.Empty;
     private string Endpoint = string.Empty;
 
-    private bool IsRealProvider => SelectedProvider is ModelProvider.OpenAI or ModelProvider.AzureOpenAI;
-
-    private bool HasMissingRequiredFields =>
-        IsRealProvider &&
-        (string.IsNullOrWhiteSpace(ApiKey)
-         || string.IsNullOrWhiteSpace(ModelId)
-         || (SelectedProvider == ModelProvider.AzureOpenAI && string.IsNullOrWhiteSpace(Endpoint)));
-
-    // Optional custom endpoint for OpenAI-compatible providers (Groq, local models). Null when valid or empty.
-    private string? OpenAIEndpointError =>
-        SelectedProvider == ModelProvider.OpenAI
-        && !SmartOps.Web.Services.OpenAICompatibleEndpointValidator.TryValidate(Endpoint, out _, out var error)
-            ? error
-            : null;
     private bool ShowApiKey;
     private bool IsSaving;
-    private bool ShowToast;
+    private bool IsTesting;
+    private bool Saved;
+    private bool SaveFailed;
     private bool ShowValidationErrors;
+    private ConnectionTestResult? TestResult;
+    private string TestedModel = string.Empty;
 
-    private string ApiKeyInputType => ShowApiKey ? "text" : "password";
+    // Each real provider keeps its own values: switching shows that provider's draft, never the other one's.
+    private readonly Dictionary<ModelProvider, ProviderCredentials> _drafts = new();
 
-    private string ProviderCardClass(ModelProvider provider)
-        => $"integration-card {(SelectedProvider == provider ? "active" : string.Empty)}";
+    private bool IsRealProvider => SelectedProvider is ModelProvider.OpenAI or ModelProvider.AzureOpenAI;
+    private bool IsAzure => SelectedProvider == ModelProvider.AzureOpenAI;
 
-    private void SelectProvider(ModelProvider provider)
+    private string PanelTitle => SelectedProvider switch
     {
-        SelectedProvider = provider;
-        if (provider == ModelProvider.Local)
+        ModelProvider.OpenAI => "Credenciales de OpenAI o compatible",
+        ModelProvider.AzureOpenAI => "Credenciales de Azure OpenAI",
+        _ => "Simulador local"
+    };
+
+    private string? ApiKeyError =>
+        ShowValidationErrors && IsRealProvider && string.IsNullOrWhiteSpace(ApiKey) ? "La API key es obligatoria." : null;
+
+    private string? ModelIdError =>
+        ShowValidationErrors && IsRealProvider && string.IsNullOrWhiteSpace(ModelId)
+            ? (IsAzure ? "El deployment es obligatorio." : "El modelo es obligatorio.")
+            : null;
+
+    private string? EndpointError
+    {
+        get
         {
-            ShowValidationErrors = false;
+            if (!ShowValidationErrors || !IsRealProvider) return null;
+            if (IsAzure)
+            {
+                if (string.IsNullOrWhiteSpace(Endpoint)) return "El endpoint de Azure OpenAI es obligatorio.";
+                return Uri.TryCreate(Endpoint.Trim(), UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
+                    ? null
+                    : OpenAICompatibleEndpointValidator.InvalidUriMessage;
+            }
+            return OpenAICompatibleEndpointValidator.TryValidate(Endpoint, out _, out var error) ? null : error;
         }
     }
 
-    private void ToggleApiKeyVisibility()
+    private bool IsValid
     {
-        ShowApiKey = !ShowApiKey;
+        get
+        {
+            var previous = ShowValidationErrors;
+            ShowValidationErrors = true;
+            var valid = ApiKeyError is null && ModelIdError is null && EndpointError is null;
+            ShowValidationErrors = previous;
+            return valid;
+        }
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        // Load saved settings from DB (Settings key-value)
         try
         {
-            using var conn = Db.Database.GetDbConnection();
-            if (conn.State != System.Data.ConnectionState.Open) conn.Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT Value FROM Settings WHERE Key = @k";
-            var p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.Provider"; cmd.Parameters.Add(p);
-            var val = cmd.ExecuteScalar() as string;
-            if (!string.IsNullOrWhiteSpace(val) && Enum.TryParse<ModelProvider>(val, out var prov)) SelectedProvider = prov;
-
-            cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.ApiKey"; cmd.Parameters.Add(p);
-            val = cmd.ExecuteScalar() as string; if (!string.IsNullOrWhiteSpace(val)) ApiKey = val;
-
-            cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.ModelId"; cmd.Parameters.Add(p);
-            val = cmd.ExecuteScalar() as string; if (!string.IsNullOrWhiteSpace(val)) ModelId = val;
-
-            cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.Endpoint"; cmd.Parameters.Add(p);
-            val = cmd.ExecuteScalar() as string; if (!string.IsNullOrWhiteSpace(val)) Endpoint = val;
+            foreach (var provider in new[] { ModelProvider.OpenAI, ModelProvider.AzureOpenAI })
+            {
+                _drafts[provider] = Store.Read(provider.ToString());
+            }
+            SelectedProvider = Enum.Parse<ModelProvider>(Store.ReadActiveProvider());
+            LoadDraft(SelectedProvider);
         }
         catch
         {
-            // ignore load errors
+            // Settings table missing (fresh DB): start empty.
         }
     }
 
-    private async Task SaveConfigurationAsync()
+    private void StashDraft()
     {
+        if (IsRealProvider) _drafts[SelectedProvider] = new(ApiKey, ModelId, Endpoint);
+    }
+
+    private void LoadDraft(ModelProvider provider)
+    {
+        var c = _drafts.TryGetValue(provider, out var d) ? d : ProviderCredentials.Empty;
+        ApiKey = c.ApiKey;
+        ModelId = c.ModelId;
+        Endpoint = c.Endpoint;
+    }
+
+    private void SelectProvider(ModelProvider provider)
+    {
+        if (provider == SelectedProvider) return;
+        StashDraft();
+        SelectedProvider = provider;
+        LoadDraft(provider);
+        ShowApiKey = false;
+        ShowValidationErrors = false;
+        ClearFeedback();
+    }
+
+    private void OnFieldChanged() => ClearFeedback();
+
+    private void ClearFeedback()
+    {
+        TestResult = null;
+        Saved = false;
+        SaveFailed = false;
+    }
+
+    private void ToggleApiKeyVisibility() => ShowApiKey = !ShowApiKey;
+
+    private async Task TestConnectionAsync()
+    {
+        if (IsTesting || !IsRealProvider) return;
+        ClearFeedback();
         ShowValidationErrors = true;
+        if (!IsValid) return;
 
-        if (HasMissingRequiredFields || OpenAIEndpointError is not null)
-        {
-            StateHasChanged();
-            return;
-        }
-
-        IsSaving = true;
-        ShowToast = false;
-        StateHasChanged();
-
+        IsTesting = true;
+        TestedModel = ModelId.Trim();
         try
         {
-            using var conn = Db.Database.GetDbConnection();
-            if (conn.State != System.Data.ConnectionState.Open) conn.Open();
-            using var tran = conn.BeginTransaction();
-            using var cmd = conn.CreateCommand();
-            cmd.Transaction = tran;
-            cmd.CommandText = "INSERT OR REPLACE INTO Settings (Key,Value) VALUES (@k,@v);";
-            var pK = cmd.CreateParameter(); pK.ParameterName = "@k"; cmd.Parameters.Add(pK);
-            var pV = cmd.CreateParameter(); pV.ParameterName = "@v"; cmd.Parameters.Add(pV);
+            TestResult = await ConnectionTester.TestAsync(SelectedProvider.ToString(), ApiKey, ModelId, Endpoint);
+        }
+        finally
+        {
+            IsTesting = false;
+        }
+    }
 
-            pK.Value = "Integrations.Provider"; pV.Value = SelectedProvider.ToString(); cmd.ExecuteNonQuery();
-            pK.Value = "Integrations.ApiKey"; pV.Value = ApiKey ?? string.Empty; cmd.ExecuteNonQuery();
-            pK.Value = "Integrations.ModelId"; pV.Value = ModelId ?? string.Empty; cmd.ExecuteNonQuery();
-            pK.Value = "Integrations.Endpoint"; pV.Value = Endpoint?.Trim() ?? string.Empty; cmd.ExecuteNonQuery();
+    private Task SaveConfigurationAsync()
+    {
+        if (IsSaving) return Task.CompletedTask;
+        ClearFeedback();
+        ShowValidationErrors = true;
+        if (IsRealProvider && !IsValid) return Task.CompletedTask;
 
-            tran.Commit();
-            ShowToast = true;
+        IsSaving = true;
+        try
+        {
+            Store.Save(SelectedProvider.ToString(), IsRealProvider ? new ProviderCredentials(ApiKey, ModelId, Endpoint) : null);
+            StashDraft();
+            Saved = true;
             ShowValidationErrors = false;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Failed to save integrations settings: {ex}");
+            SaveFailed = true;
+            Console.Error.WriteLine($"Failed to save integrations settings: {ex.GetType().Name}");
         }
         finally
         {
             IsSaving = false;
-            StateHasChanged();
-            await Task.Delay(1500);
-            ShowToast = false;
-            StateHasChanged();
         }
+        return Task.CompletedTask;
     }
 }

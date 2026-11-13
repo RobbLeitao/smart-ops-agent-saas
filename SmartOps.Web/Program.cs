@@ -176,12 +176,13 @@ builder.Services.AddScoped<SmartOps.Web.Services.TransactionDrawerService>();
 builder.Services.AddScoped<SmartOps.Web.Services.DbContextGate>();
 builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticFeedbackService>();
 builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticReportService>();
+builder.Services.AddScoped<SmartOps.Web.Services.IntegrationSettingsStore>();
+builder.Services.AddSingleton<SmartOps.Web.Services.IAiConnectionTester, SmartOps.Web.Services.AiConnectionTester>();
 // Ensure HubContext is available via SignalR server support; SignalR is included in ASP.NET Core
 builder.Services.AddSignalR();
 
-// Enable verbose SignalR logging to surface InvalidDataException stack traces in Output window
-builder.Logging.AddFilter("Microsoft.AspNetCore.SignalR", LogLevel.Debug);
-builder.Logging.AddFilter("Microsoft.AspNetCore.Http.Connections", LogLevel.Debug);
+// SignalR/Blazor circuit logging stays at the configured level (Warning). Debug level logs every hub
+// invocation with its arguments, i.e. the values typed in forms (passwords, API keys).
 
 // Register transaction publisher provider based on configuration (Simulator | External)
 var txSection = builder.Configuration.GetSection("TransactionSettings");
@@ -283,13 +284,6 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 
 var app = builder.Build();
 
-// Debug endpoint to capture client-side clicks and report to server logs
-app.MapPost("/api/debug/click", async (HttpContext http, ILogger<Program> logger) =>
-{
-    logger.LogInformation("/api/debug/click received from {RemoteIp}", http.Connection.RemoteIpAddress);
-    await http.Response.WriteAsync("ok");
-});
-
 // Ensure the database schema exists on startup
 using (var scope = app.Services.CreateScope())
 {
@@ -371,6 +365,19 @@ using (var scope = app.Services.CreateScope())
         {
             // ignore
         }
+
+        // Integrations: move the legacy global ApiKey/ModelId/Endpoint keys to the per-provider ones
+        // (idempotent; the app does not apply EF migrations, so this runs as plain SQL at startup).
+        try
+        {
+            SmartOps.Web.Services.IntegrationSettingsStore.MigrateLegacy(
+                db.Database.GetDbConnection(),
+                scope.ServiceProvider.GetService<ILoggerFactory>()?.CreateLogger("IntegrationsMigration"));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Integrations settings migration failed: {ex.GetType().Name}");
+        }
     }
     catch
     {
@@ -391,31 +398,6 @@ try
 }
 catch { }
 
-// Temporary DI probe: subscribe a console handler to ITransactionPublisher to verify events are emitted.
-try
-{
-    var publisher = app.Services.GetService<SmartOps.Core.Interfaces.ITransactionPublisher>();
-    if (publisher != null)
-    {
-        publisher.OnTransactionCreated += (s, e) =>
-        {
-            try
-            {
-                Console.WriteLine($"[DI-PROBE] Event fired for transaction {e.Transaction.Id} status={e.Transaction.Status} gateway={e.Transaction.GatewayReference}");
-            }
-            catch { }
-        };
-        Console.WriteLine("[DI-PROBE] Subscribed temporary console handler to ITransactionPublisher.");
-    }
-    else
-    {
-        Console.WriteLine("[DI-PROBE] ITransactionPublisher not registered/resolvable.");
-    }
-}
-catch (Exception ex)
-{
-    Console.WriteLine("[DI-PROBE] Exception while subscribing probe: " + ex);
-}
 
 
 // Configure the HTTP request pipeline.
@@ -438,40 +420,51 @@ app.MapRazorComponents<App>()
 // Map SignalR hub for transactions
 app.MapHub<SmartOps.Web.Hubs.TransactionHub>("/hubs/transactions");
 
-// Temporary diagnostic endpoint to inspect DI and publisher subscribers
-app.MapGet("/debug/diag", (IServiceProvider sp) =>
+// Debug-only endpoints: never mapped outside Development.
+if (app.Environment.IsDevelopment())
 {
-    var pid = System.Diagnostics.Process.GetCurrentProcess().Id;
-    var notifier = sp.GetService<SmartOps.Web.Services.TransactionNotifier>();
-    var publisher = sp.GetService<SmartOps.Core.Interfaces.ITransactionPublisher>();
-    int subscriberCount = 0;
-    try
+    // Debug endpoint to capture client-side clicks and report to server logs
+    app.MapPost("/api/debug/click", async (HttpContext http, ILogger<Program> logger) =>
     {
-        var ev = publisher?.GetType().GetEvent("OnTransactionCreated");
-        if (ev != null)
+        logger.LogInformation("/api/debug/click received from {RemoteIp}", http.Connection.RemoteIpAddress);
+        await http.Response.WriteAsync("ok");
+    });
+
+    // Temporary diagnostic endpoint to inspect DI and publisher subscribers
+    app.MapGet("/debug/diag", (IServiceProvider sp) =>
+    {
+        var pid = System.Diagnostics.Process.GetCurrentProcess().Id;
+        var notifier = sp.GetService<SmartOps.Web.Services.TransactionNotifier>();
+        var publisher = sp.GetService<SmartOps.Core.Interfaces.ITransactionPublisher>();
+        int subscriberCount = 0;
+        try
         {
-            var fi = publisher.GetType().GetField("OnTransactionCreated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-            if (fi != null)
+            var ev = publisher?.GetType().GetEvent("OnTransactionCreated");
+            if (ev != null)
             {
-                var dlg = fi.GetValue(publisher) as MulticastDelegate;
-                if (dlg != null) subscriberCount = dlg.GetInvocationList().Length;
-            }
-            else
-            {
-                // Try property-style backing field
-                var prop = publisher.GetType().GetField("_onTransactionCreated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-                if (prop != null)
+                var fi = publisher.GetType().GetField("OnTransactionCreated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                if (fi != null)
                 {
-                    var dlg2 = prop.GetValue(publisher) as MulticastDelegate;
-                    if (dlg2 != null) subscriberCount = dlg2.GetInvocationList().Length;
+                    var dlg = fi.GetValue(publisher) as MulticastDelegate;
+                    if (dlg != null) subscriberCount = dlg.GetInvocationList().Length;
+                }
+                else
+                {
+                    // Try property-style backing field
+                    var prop = publisher.GetType().GetField("_onTransactionCreated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                    if (prop != null)
+                    {
+                        var dlg2 = prop.GetValue(publisher) as MulticastDelegate;
+                        if (dlg2 != null) subscriberCount = dlg2.GetInvocationList().Length;
+                    }
                 }
             }
         }
-    }
-    catch { }
+        catch { }
 
-    return Results.Json(new { pid, notifierPresent = notifier != null, publisherPresent = publisher != null, subscriberCount });
-});
+        return Results.Json(new { pid, notifierPresent = notifier != null, publisherPresent = publisher != null, subscriberCount });
+    });
+}
 
 // Minimal account endpoints for login to set cookies outside the Blazor circuit
 app.MapPost("/account/login", async (HttpContext http, Microsoft.AspNetCore.Identity.UserManager<SmartOps.Infrastructure.Data.ApplicationUser> userManager, Microsoft.AspNetCore.Identity.SignInManager<SmartOps.Infrastructure.Data.ApplicationUser> signInManager) =>
@@ -480,7 +473,6 @@ app.MapPost("/account/login", async (HttpContext http, Microsoft.AspNetCore.Iden
     {
         using var sr = new StreamReader(http.Request.Body);
         var body = await sr.ReadToEndAsync();
-        Console.Error.WriteLine($"[DEBUG] /account/login body: '{body}'");
         if (string.IsNullOrWhiteSpace(body)) return Results.BadRequest(new { error = "Los campos están vacíos." });
         var dict = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string,string>>(body, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         var email = dict != null && dict.TryGetValue("Email", out var e) ? e : string.Empty;
@@ -505,7 +497,8 @@ app.MapPost("/account/login", async (HttpContext http, Microsoft.AspNetCore.Iden
     }
     catch (Exception ex)
     {
-        Console.Error.WriteLine($"Account login endpoint error: {ex}");
+        // Never log the request body (it carries the password).
+        Console.Error.WriteLine($"Account login endpoint error: {ex.GetType().Name}: {ex.Message}");
         return Results.StatusCode(500);
     }
 }).WithMetadata(new Microsoft.AspNetCore.Mvc.IgnoreAntiforgeryTokenAttribute());

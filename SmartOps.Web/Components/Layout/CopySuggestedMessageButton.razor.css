@@ -1,3 +1,4 @@
+/* Botón «Copiar mensaje». Solo tokens. */
 .copy-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 
 .copy-btn {
@@ -6,33 +7,27 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--space-2);
     white-space: nowrap;
     overflow: hidden;
     background: transparent;
-    color: #cbd5e1;
-    border: 1px solid rgba(148,163,184,0.18);
-    border-radius: 8px;
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
     padding: 6px 10px;
     font-weight: 600;
-    transition: color .2s ease, border-color .2s ease, background .2s ease, box-shadow .2s ease;
+    transition: color .2s ease, border-color .2s ease, background .2s ease;
 }
-.copy-btn:hover:not([disabled]) { color: #f1f5f9; border-color: rgba(148,163,184,0.32); background: rgba(255,255,255,0.04); }
-.copy-btn[disabled] { opacity: .45; cursor: not-allowed; }
+.copy-btn:hover:not([disabled]) { color: var(--text); background: var(--surface-raised); }
+.copy-btn[disabled] { color: var(--text-muted); cursor: not-allowed; }
 
-.copy-btn.copied {
-    color: #5eead4;
-    border-color: rgba(94,234,212,0.45);
-    background: rgba(15,42,44,0.6);
-    box-shadow: 0 0 12px rgba(94,234,212,0.18);
-}
+.copy-btn.copied { border-color: var(--ai-border); color: var(--ai-text); }
+.copy-btn.failed { border-color: var(--danger-border); }
 
-.copy-btn.failed { color: #fca5a5; border-color: rgba(248,113,113,0.45); }
+.copy-note { color: var(--text-muted); }
+.copy-error { color: var(--danger); }
 
-.copy-note { color: #94a3b8; }
-.copy-error { color: #fca5a5; }
-
-/* Variante del rediseño (Drawer de Detalle): solo tokens. */
+/* Variante del rediseño (Drawer de Detalle). */
 .copy-wrap-ds { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
 .copy-btn-ds.copied { border-color: var(--ai-border); color: var(--ai-text); }
 .copy-btn-ds.failed { border-color: var(--danger-border); }

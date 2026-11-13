@@ -35,10 +35,6 @@ namespace SmartOps.Web.Services
     /// </summary>
     public sealed class AIOpsService : IAIOpsService
     {
-        private const string ProviderKey = "Integrations.Provider";
-        private const string ApiKeyKey = "Integrations.ApiKey";
-        private const string ModelIdKey = "Integrations.ModelId";
-        private const string EndpointKey = "Integrations.Endpoint";
         private const string DefaultModelId = "gpt-4o";
 
         // Artificial "thinking" delay applied only to the Local Simulator path below, so the AI diagnostic
@@ -109,7 +105,7 @@ namespace SmartOps.Web.Services
                     ex);
             }
 
-            var content = await InvokeAndMapErrorsAsync(providerKernel, userPrompt, settings);
+            var content = await InvokeAndMapErrorsAsync(providerKernel, userPrompt, settings, integration.ModelId, integration.ApiKey);
             if (string.IsNullOrWhiteSpace(content))
             {
                 throw new AiEngineException("El proveedor de IA no devolvió contenido en la respuesta.");
@@ -139,7 +135,7 @@ namespace SmartOps.Web.Services
             }
         }
 
-        private static async Task<string> InvokeAndMapErrorsAsync(Kernel kernel, string userPrompt, PromptExecutionSettings settings)
+        private static async Task<string> InvokeAndMapErrorsAsync(Kernel kernel, string userPrompt, PromptExecutionSettings settings, string modelId, string apiKey)
         {
             try
             {
@@ -148,7 +144,7 @@ namespace SmartOps.Web.Services
             }
             catch (Exception ex)
             {
-                throw MapToAiEngineException(ex);
+                throw MapToAiEngineException(ex, modelId, apiKey);
             }
         }
 
@@ -157,34 +153,8 @@ namespace SmartOps.Web.Services
                && ex.Message != null
                && ex.Message.Contains("No service was found", StringComparison.OrdinalIgnoreCase);
 
-        private static AiEngineException MapToAiEngineException(Exception ex)
-        {
-            return ex switch
-            {
-                AiEngineException aiEx => aiEx,
-                HttpOperationException httpEx => new AiEngineException(MapHttpErrorMessage(httpEx), httpEx),
-                OperationCanceledException => new AiEngineException(
-                    "La solicitud al proveedor de IA superó el tiempo de espera (timeout). Intentá nuevamente en unos minutos.",
-                    ex),
-                _ => new AiEngineException(
-                    $"Ocurrió un error inesperado al invocar al proveedor de IA: {ex.Message}",
-                    ex)
-            };
-        }
-
-        private static string MapHttpErrorMessage(HttpOperationException httpEx)
-        {
-            return httpEx.StatusCode switch
-            {
-                HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden =>
-                    "La API Key configurada en /integrations no es válida o no tiene permisos para este modelo. Verificá las credenciales.",
-                HttpStatusCode.TooManyRequests =>
-                    "Se alcanzó el límite de solicitudes (rate limit) del proveedor de IA. Esperá unos minutos e intentá nuevamente.",
-                HttpStatusCode.RequestTimeout or HttpStatusCode.GatewayTimeout =>
-                    "La solicitud al proveedor de IA superó el tiempo de espera (timeout). Intentá nuevamente en unos minutos.",
-                _ => $"El proveedor de IA devolvió un error ({(httpEx.StatusCode.HasValue ? ((int)httpEx.StatusCode.Value).ToString() : httpEx.Message)}). Verificá la configuración en /integrations."
-            };
-        }
+        private static AiEngineException MapToAiEngineException(Exception ex, string? modelId = null, string? apiKey = null)
+            => AiEngineErrorMapper.Map(ex, modelId, apiKey);
 
         private static bool IsRealProvider(string? provider)
             => !string.IsNullOrWhiteSpace(provider)
@@ -198,36 +168,20 @@ namespace SmartOps.Web.Services
 
             try
             {
-                var conn = _db.Database.GetDbConnection();
-                if (conn.State != ConnectionState.Open) conn.Open();
-
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText = "SELECT Value FROM Settings WHERE Key = @k LIMIT 1";
-                var param = cmd.CreateParameter();
-                param.ParameterName = "@k";
-                cmd.Parameters.Add(param);
-
-                string? Read(string key)
-                {
-                    param.Value = key;
-                    return cmd.ExecuteScalar() as string;
-                }
-
-                var provider = Read(ProviderKey);
-                var apiKey = Read(ApiKeyKey) ?? string.Empty;
-                var modelId = Read(ModelIdKey);
-                var endpoint = Read(EndpointKey);
+                // Per-provider credentials (IntegrationSettingsStore): the active provider's own values only.
+                var active = new IntegrationSettingsStore(_db).ReadActive();
+                var c = active.Credentials;
 
                 return new IntegrationSettings(
-                    provider,
-                    apiKey,
-                    string.IsNullOrWhiteSpace(modelId) ? DefaultModelId : modelId,
-                    string.IsNullOrWhiteSpace(endpoint) ? null : endpoint);
+                    active.Provider,
+                    c.ApiKey,
+                    string.IsNullOrWhiteSpace(c.ModelId) ? DefaultModelId : c.ModelId,
+                    string.IsNullOrWhiteSpace(c.Endpoint) ? null : c.Endpoint);
             }
             catch (Exception ex)
             {
                 // Settings table may not exist yet (fresh DB / test providers): treat as unconfigured.
-                Console.Error.WriteLine($"Failed reading integrations settings for AI: {ex.Message}");
+                Console.Error.WriteLine($"Failed reading integrations settings for AI: {ex.GetType().Name}");
                 return empty;
             }
         }

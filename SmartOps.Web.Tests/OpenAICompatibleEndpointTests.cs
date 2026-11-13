@@ -169,6 +169,25 @@ namespace SmartOps.Web.Tests
         }
 
         [Fact]
+        public async Task AIOpsService_ModelNotFound404_MapsToModelMessage_ShownInDrawer()
+        {
+            var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                Content = new StringContent(
+                    "{\"error\":{\"message\":\"The model `nope` does not exist\",\"type\":\"invalid_request_error\",\"code\":\"model_not_found\"}}",
+                    Encoding.UTF8, "application/json")
+            });
+            using var db = CreateDbWithSettings("OpenAI", ApiKey, "nope", GroqEndpoint);
+            var service = new AIOpsService(Kernel.CreateBuilder().Build(), db,
+                new SemanticKernelChatCompletionServiceFactory(new HttpClient(handler)));
+
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
+
+            Assert.Equal("El modelo «nope» no existe o esta key no tiene acceso. Verificá el ID del modelo.", ex.Message);
+            Assert.DoesNotContain(ApiKey, ex.ToString());
+        }
+
+        [Fact]
         public async Task AIOpsService_CustomEndpoint_NetworkTimeout_MapsToTimeoutAiEngineException()
         {
             var handler = new FakeHandler(_ => throw new TaskCanceledException("The request timed out."));
@@ -253,9 +272,9 @@ namespace SmartOps.Web.Tests
             void Set(string key, string value) => db.Database.ExecuteSqlRaw(
                 "INSERT OR REPLACE INTO Settings (Key,Value) VALUES ({0}, {1});", key, value);
             Set("Integrations.Provider", provider);
-            Set("Integrations.ApiKey", apiKey);
-            Set("Integrations.ModelId", modelId);
-            if (endpoint != null) Set("Integrations.Endpoint", endpoint);
+            Set(IntegrationSettingsStore.Key(IntegrationSettingsStore.Normalize(provider), "ApiKey"), apiKey);
+            Set(IntegrationSettingsStore.Key(IntegrationSettingsStore.Normalize(provider), "ModelId"), modelId);
+            if (endpoint != null) Set(IntegrationSettingsStore.Key(IntegrationSettingsStore.Normalize(provider), "Endpoint"), endpoint);
             return db;
         }
 

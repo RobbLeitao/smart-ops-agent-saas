@@ -41,19 +41,28 @@ namespace SmartOps.Web.Tests
             db.Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS Settings (Key TEXT PRIMARY KEY, Value TEXT);");
         }
 
+        // Per-provider keys (IntegrationSettingsStore). A "Local" provider keeps leftover OpenAI credentials,
+        // which must be ignored.
+        private static string CredKey(string provider, string field)
+            => IntegrationSettingsStore.Key(
+                IntegrationSettingsStore.Normalize(provider) == IntegrationSettingsStore.Local
+                    ? IntegrationSettingsStore.OpenAI
+                    : IntegrationSettingsStore.Normalize(provider),
+                field);
+
         private AppDbContext CreateDbWithSettings(string provider, string apiKey, string modelId = "gpt-4o", string? endpoint = null)
         {
             var db = new AppDbContext(_options);
             db.Database.ExecuteSqlRaw(
                 "INSERT OR REPLACE INTO Settings (Key,Value) VALUES ('Integrations.Provider', {0});", provider);
             db.Database.ExecuteSqlRaw(
-                "INSERT OR REPLACE INTO Settings (Key,Value) VALUES ('Integrations.ApiKey', {0});", apiKey);
+                "INSERT OR REPLACE INTO Settings (Key,Value) VALUES ({0}, {1});", CredKey(provider, "ApiKey"), apiKey);
             db.Database.ExecuteSqlRaw(
-                "INSERT OR REPLACE INTO Settings (Key,Value) VALUES ('Integrations.ModelId', {0});", modelId);
+                "INSERT OR REPLACE INTO Settings (Key,Value) VALUES ({0}, {1});", CredKey(provider, "ModelId"), modelId);
             if (endpoint != null)
             {
                 db.Database.ExecuteSqlRaw(
-                    "INSERT OR REPLACE INTO Settings (Key,Value) VALUES ('Integrations.Endpoint', {0});", endpoint);
+                    "INSERT OR REPLACE INTO Settings (Key,Value) VALUES ({0}, {1});", CredKey(provider, "Endpoint"), endpoint);
             }
             return db;
         }

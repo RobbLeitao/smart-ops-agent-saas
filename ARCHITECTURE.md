@@ -189,8 +189,7 @@ La UI usa el camino B.
 
 | Origen | Clave(s) | Quién la lee |
 |---|---|---|
-| Tabla `Settings` (UI `/integrations`) | `Integrations.Provider` (`Local`/`OpenAI`), `Integrations.ApiKey`, `Integrations.ModelId` | `AIOpsService` (camino B, el que usa la UI), `ProviderSwitchingTransactionAnalyzer`, `AzureOpenAiDiagnosticEngine` |
-| Tabla `Settings` | `Integrations.Endpoint` | Solo `AzureOpenAiDiagnosticEngine`. La UI no la escribe. |
+| Tabla `Settings` (UI `/integrations`) | `Integrations.Provider` (`Local`/`OpenAI`/`AzureOpenAI`) y `Integrations.{OpenAI\|AzureOpenAI}.{ApiKey\|ModelId\|Endpoint}` (ver §6) | `AIOpsService`, vía `IntegrationSettingsStore` |
 | Variable de entorno | `OPENAI_API_KEY`, `OPENAI_MODEL_ID` | Kernel singleton (`Program.cs:110`) |
 | `appsettings.json` | `OpenAI:ApiKey` | Decide qué implementación de `ITransactionAnalyzer` se registra |
 | `appsettings.json` / env | `AI:*`, `AI_PROVIDER`, `AZURE_OPENAI_ENDPOINT` | `skBuilder` (sin uso posterior) y la decisión de registrar `DevFakeKernelAdapter` |
@@ -297,20 +296,19 @@ TransactionNotifier (singleton, se instancia a la fuerza en Program.cs:408)
 
 ## 6. Persistencia y configuración de `/integrations`
 
-- Modelo: no hay entidad EF. Se usa un key-value en la tabla `Settings (Key TEXT PRIMARY KEY, Value TEXT)`, creada con SQL crudo al arrancar (`Program.cs:383–386`).
-- Claves:
+- Modelo: no hay entidad EF. Se usa un key-value en la tabla `Settings (Key TEXT PRIMARY KEY, Value TEXT)`, creada con SQL crudo al arrancar (`Program.cs`).
+- Acceso: siempre a través de `Services/IntegrationSettingsStore.cs` (ADO.NET sobre `AppDbContext.Database.GetDbConnection()`, parámetros `@k`/`@v`).
+- Claves (configuración **por proveedor**: cambiar de proveedor nunca arrastra los valores del otro):
 
 | Clave | Escrita por | Leída por |
 |---|---|---|
-| `Integrations.Provider` | `Integrations.razor` (`"Local"` / `"OpenAI"`) | `Integrations.razor`, `AIOpsService`, `ProviderSwitchingTransactionAnalyzer`, `AzureOpenAiDiagnosticEngine` |
-| `Integrations.ApiKey` | `Integrations.razor` (texto plano) | `Integrations.razor`, `AIOpsService`, `AzureOpenAiDiagnosticEngine` |
-| `Integrations.ModelId` | `Integrations.razor` | `Integrations.razor`, `AIOpsService`, `AzureOpenAiDiagnosticEngine` |
-| `Integrations.Endpoint` | — | `AzureOpenAiDiagnosticEngine` |
+| `Integrations.Provider` | `Integrations.razor` (`Local` / `OpenAI` / `AzureOpenAI`) | `Integrations.razor`, `AIOpsService` |
+| `Integrations.OpenAI.ApiKey` / `.ModelId` / `.Endpoint` | `Integrations.razor` (la key en texto plano; Endpoint vacío = OpenAI oficial, o una URL OpenAI-compatible como Groq) | `Integrations.razor`, `AIOpsService` si el activo es `OpenAI` |
+| `Integrations.AzureOpenAI.ApiKey` / `.ModelId` / `.Endpoint` | `Integrations.razor` (ModelId = deployment; Endpoint obligatorio) | `Integrations.razor`, `AIOpsService` si el activo es `AzureOpenAI` |
 
-- Acceso: siempre ADO.NET sobre `AppDbContext.Database.GetDbConnection()` con parámetros `@k`/`@v`, sin LINQ.
-  - Lectura: `OnInitializedAsync` en `Components/Pages/Integrations.razor:161–184` (`SELECT Value FROM Settings WHERE Key=@k`).
-  - Escritura: `SaveConfigurationAsync` en `Integrations.razor:186–230`, con `INSERT OR REPLACE` dentro de una transacción. Valida API key y Model ID cuando el provider es OpenAI.
-- La UI muestra el texto "La configuración se simula por ahora y queda lista para persistencia real." (`Integrations.razor:105`), aunque los valores sí se persisten en `Settings`.
+- Migración de las claves viejas (`Integrations.ApiKey`, `.ModelId`, `.Endpoint`, globales): `IntegrationSettingsStore.MigrateLegacy` corre al arrancar, en una transacción. Copia con `INSERT OR IGNORE` al proveedor activo (si es `Local`, a `AzureOpenAI` cuando el endpoint es `*.openai.azure.com`, si no a `OpenAI`), borra las claves viejas y loguea qué migró, sin valores. Es idempotente.
+- «Probar conexión» (`Services/AiConnectionTester.cs`) usa los valores del formulario sin guardarlos.
+- La API key nunca se loguea ni aparece en mensajes de error.
 
 Resto de la configuración:
 
@@ -349,7 +347,7 @@ Hay un único proyecto: `SmartOps.Web.Tests` (xUnit), con 48 tests (`[Fact]`/`[T
 | `DashboardMetricsTests.cs` | 2 | % útil calculado y caso sin votos (N/A) | — |
 | `DashboardUiTests.cs` | 1 | Click en "Detalle" abre `TransactionDetailDrawer` | bUnit |
 | `DatabaseStartupTests.cs` | 2 | Creación del archivo SQLite (también en un subdirectorio configurado) | `WebApplicationFactory` |
-| `IntegrationsSettingsPersistenceTests.cs` | 1 | Guardar y leer las claves `Integrations.*` en `Settings` | SQLite |
+| `IntegrationsSettingsPersistenceTests.cs` | 9 | Configuración por proveedor (`IntegrationSettingsStore`) y migración idempotente de las claves viejas | SQLite |
 | `SignalRIntegrationTests.cs` | 1 | El hub entrega `ReceiveTransaction` cuando el publisher dispara | `WebApplicationFactory` + `TestTransactionPublisher` |
 
 Helpers de test: `ControllableFakeAIOps.cs`, `FakeOrchestrator.cs` (clase `FakeAIOps`), `AuthTestFixture.cs`.
