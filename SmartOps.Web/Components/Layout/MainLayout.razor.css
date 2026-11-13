@@ -10,6 +10,8 @@
 
 /* Header: docs/redesign/01-dashboard.html */
 .app-header {
+    /* Ancla del desplegable de notificaciones en pantallas angostas. */
+    position: relative;
     display: flex;
     flex-wrap: wrap;
     align-items: center;

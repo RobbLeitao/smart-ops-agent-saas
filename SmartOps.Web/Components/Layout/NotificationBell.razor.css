@@ -69,6 +69,7 @@
 
 .notif-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-3);
@@ -107,6 +108,7 @@
     font-weight: 500;
     text-decoration: underline;
     text-underline-offset: 3px;
+    white-space: nowrap;
     cursor: pointer;
 }
 
@@ -229,6 +231,25 @@
 
 .notif-mark-read:hover {
     color: var(--text);
+}
+
+/* Pantallas angostas: la campana puede no estar en el borde derecho, así que el desplegable se ancla
+   al header (position: relative) y ocupa el ancho con el margen lateral de 16px. */
+@media (max-width: 640px) {
+    .notif {
+        position: static;
+    }
+
+    .notif-panel {
+        top: calc(100% + var(--space-1));
+        left: var(--space-4);
+        right: var(--space-4);
+        width: auto;
+    }
+
+    .notif-list {
+        max-height: min(520px, calc(100vh - 240px));
+    }
 }
 
 .notif-empty {
