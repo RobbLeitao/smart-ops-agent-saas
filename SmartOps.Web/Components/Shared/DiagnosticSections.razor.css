@@ -1,0 +1,92 @@
+/* Secciones del diagnóstico (Drawer, panel del Historial). Solo tokens.
+   El informe PDF trae sus propios estilos print-* (DiagnosticReport.razor). */
+
+.diag-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    animation: diag-fade-in 180ms ease-out both;
+}
+
+.diag-block-message {
+    gap: var(--space-2);
+}
+
+.diag-overline {
+    margin: 0;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.diag-md ::deep p {
+    margin: 0 0 var(--space-2);
+}
+
+.diag-md ::deep p:last-child,
+.diag-md ::deep ul:last-child,
+.diag-md ::deep ol:last-child {
+    margin-bottom: 0;
+}
+
+.diag-md ::deep ul,
+.diag-md ::deep ol {
+    margin: 0 0 var(--space-2);
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.diag-md ::deep h1,
+.diag-md ::deep h2,
+.diag-md ::deep h3,
+.diag-md ::deep h4,
+.diag-md ::deep h5,
+.diag-md ::deep h6 {
+    margin: var(--space-2) 0 var(--space-1);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.diag-md ::deep blockquote {
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+.diag-md ::deep a {
+    color: var(--text);
+    text-decoration: underline;
+}
+
+.diag-md ::deep code {
+    font-family: var(--font-mono);
+    color: var(--text);
+}
+
+.diag-message {
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px var(--space-4);
+    overflow-wrap: anywhere;
+}
+
+@keyframes diag-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .diag-block {
+        animation-duration: 100ms;
+    }
+}

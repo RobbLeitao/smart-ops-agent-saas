@@ -1,0 +1,71 @@
+@using SmartOps.Web.Services
+@using SmartOps.Web.Components.Layout
+
+@* Las 3 secciones del diagnóstico («Qué pasó», «Qué hacer», «Mensaje para el cliente»), compartidas por el
+   Drawer de Detalle, el panel del Historial y el informe PDF. El Markdown del LLM pasa por
+   DiagnosticSectionParser y DiagnosticMarkdown (Markdig con DisableHtml): nunca se inyecta HTML crudo. *@
+@if (_sections is { HasSections: true })
+{
+    @if (!string.IsNullOrWhiteSpace(_sections.WhatHappened))
+    {
+        <div class="diag-block">
+            @Heading("Qué pasó")
+            <div class="diag-md">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections.WhatHappened))</div>
+        </div>
+    }
+    @if (!string.IsNullOrWhiteSpace(_sections.WhatToDo))
+    {
+        <div class="diag-block">
+            @Heading("Qué hacer")
+            <div class="diag-md diag-steps">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections.WhatToDo))</div>
+        </div>
+    }
+    @if (!string.IsNullOrWhiteSpace(_sections.Other))
+    {
+        <div class="diag-block diag-md diag-other">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections.Other))</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(_sections.CustomerMessage))
+    {
+        <div class="diag-block diag-block-message">
+            @Heading("Mensaje para el cliente")
+            <div class="diag-message diag-md">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections.CustomerMessage))</div>
+            @if (ShowCopyButton)
+            {
+                <CopySuggestedMessageButton Markdown="@Markdown" Label="Copiar mensaje" Compact="true" />
+            }
+        </div>
+    }
+}
+else
+{
+    @* Sin secciones reconocibles: el Markdown completo, renderizado (nunca crudo). *@
+    <div class="diag-block diag-md">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections?.FullMarkdown ?? Markdown))</div>
+}
+
+@code {
+    /// <summary>Markdown del diagnóstico tal como lo guardó el motor.</summary>
+    [Parameter] public string? Markdown { get; set; }
+
+    /// <summary>Muestra «Copiar mensaje» bajo el mensaje para el cliente. El PDF lo apaga.</summary>
+    [Parameter] public bool ShowCopyButton { get; set; } = true;
+
+    /// <summary>Nivel del título de cada sección: 4 en la app (overline) o 2 en el informe PDF.</summary>
+    [Parameter] public int HeadingLevel { get; set; } = 4;
+
+    private SmartOps.Web.Services.DiagnosticSections? _sections;
+    private string? _parsedMarkdown;
+    private bool _parsed;
+
+    protected override void OnParametersSet()
+    {
+        if (_parsed && Markdown == _parsedMarkdown) return;
+        _parsed = true;
+        _parsedMarkdown = Markdown;
+        _sections = DiagnosticSectionParser.Parse(Markdown);
+    }
+
+    // Plantilla Razor (no RenderTreeBuilder a mano) para que el título lleve el atributo del CSS aislado.
+    private RenderFragment Heading(string text) => HeadingLevel == 2
+        ? @<h2 class="diag-overline">@text</h2>
+        : @<h4 class="diag-overline">@text</h4>;
+}
