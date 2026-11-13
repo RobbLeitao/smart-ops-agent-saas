@@ -1,551 +1,334 @@
 @page "/diagnostics-history"
 @rendermode InteractiveServer
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
-@using SmartOps.Core.Entities
 @using Microsoft.EntityFrameworkCore
-@inject SmartOps.Infrastructure.Data.AppDbContext Db
-@inject IJSRuntime JS
 @using Microsoft.AspNetCore.Components.Authorization
+@using SmartOps.Web.Services
+@inject SmartOps.Infrastructure.Data.AppDbContext Db
+@inject DbContextGate DbGate
+@inject DiagnosticReportService ReportService
 @inject AuthenticationStateProvider AuthStateProvider
-@inject SmartOps.Web.Services.DiagnosticFeedbackService FeedbackService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
 @inject Microsoft.Extensions.Logging.ILogger<DiagnosticsHistory> Logger
-@inject Microsoft.AspNetCore.Identity.UserManager<SmartOps.Infrastructure.Data.ApplicationUser> UserManager
 
+<PageTitle>Historial de diagnósticos · SmartOps</PageTitle>
+
+@* Historial de diagnósticos (docs/redesign/04-historial.html). *@
 <LoggingErrorBoundary>
-<div class="py-5 diag-history-shell" style="background-color:transparent;">
-    <div class="container-fluid diag-history-container">
-        <div class="grid-dark p-4 bg-[#1e2330] rounded-lg diag-history-card" style="background-color:transparent;">
-            <div class="mb-3">
-                <h3 class="dashboard-chart-title">Historial de Diagnósticos</h3>
-                <p class="dashboard-chart-copy mb-0">Registros de diagnósticos generados por el sistema</p>
-            </div>
+<div class="hist">
+    <div class="hist-head">
+        <h1 class="hist-title">Historial de diagnósticos</h1>
+        <p class="hist-subtitle" aria-live="polite">
+            @if (_result is null)
+            {
+                <span>Cargando diagnósticos…</span>
+            }
+            else
+            {
+                <span>@_result.Total @(_result.Total == 1 ? "diagnóstico generado" : "diagnósticos generados") por el motor. Elegí uno para ver el detalle.</span>
+            }
+        </p>
+    </div>
 
-            <div class="mb-3 d-flex flex-wrap gap-3 justify-content-between align-items-end">
-                <div class="d-flex flex-wrap gap-3 align-items-end">
-                    <div>
-                        <label class="form-label text-slate-300 small mb-1">Desde</label>
-                        <InputDate @bind-Value="filterFromDate" class="form-control" style="max-width:180px;" />
-                    </div>
-                    <div>
-                        <label class="form-label text-slate-300 small mb-1">Hasta</label>
-                        <InputDate @bind-Value="filterToDate" class="form-control" style="max-width:180px;" />
-                    </div>
+    <form class="hist-filters" role="search" aria-label="Filtros del historial" @onsubmit="ApplyFiltersAsync" @onsubmit:preventDefault>
+        <label class="hist-field">
+            <span class="hist-label">Tarjeta</span>
+            <span class="hist-search">
+                <svg class="hist-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+                <input type="text" class="form-control hist-input-card" inputmode="numeric" maxlength="4" autocomplete="off"
+                       placeholder="Últimos 4 dígitos" value="@_card" @oninput="OnCardInputAsync" />
+            </span>
+        </label>
+        <label class="hist-field">
+            <span class="hist-label">Desde</span>
+            <input type="date" class="form-control hist-input-date" @bind="_from" @bind:after="ApplyFiltersAsync" />
+        </label>
+        <label class="hist-field">
+            <span class="hist-label">Hasta</span>
+            <input type="date" class="form-control hist-input-date" @bind="_to" @bind:after="ApplyFiltersAsync" />
+        </label>
+        <label class="hist-field">
+            <span class="hist-label">Valoración</span>
+            <select class="form-select hist-input-date" @bind="_vote" @bind:after="ApplyFiltersAsync">
+                <option value="@VoteFilter.All">Todas</option>
+                <option value="@VoteFilter.Useful">Útiles</option>
+                <option value="@VoteFilter.NotUseful">No útiles</option>
+                <option value="@VoteFilter.Unvoted">Sin votar</option>
+            </select>
+        </label>
+        @if (_canSeeAll)
+        {
+            <label class="hist-check">
+                <input type="checkbox" class="form-check-input" @bind="_onlyMine" @bind:after="ApplyFiltersAsync" />
+                Solo los míos
+            </label>
+        }
+        <div class="hist-filters-spacer"></div>
+        <button type="button" class="btn-ds btn-ds-link hist-clear" @onclick="ClearFiltersAsync">Limpiar filtros</button>
+    </form>
+
+    <div class="hist-layout">
+        <section class="hist-table-card" aria-label="Diagnósticos">
+            @if (_result is null)
+            {
+                <p class="hist-muted hist-state m-0" role="status">Cargando…</p>
+            }
+            else if (_result.Total == 0)
+            {
+                <div class="hist-empty">
+                    @if (Filters.IsEmpty)
+                    {
+                        <p class="m-0">Todavía no hay diagnósticos.</p>
+                    }
+                    else
+                    {
+                        <p class="m-0">No hay diagnósticos con estos filtros</p>
+                        <button type="button" class="btn-ds btn-ds-secondary" @onclick="ClearFiltersAsync">Limpiar filtros</button>
+                    }
                 </div>
-
-                <div>
-                    <div class="dashboard-filter-row">
-                        <input class="form-control dashboard-filter" placeholder="Filtrar por últimos 4 dígitos..." value="@filterLast4" @oninput="OnFilterLast4Changed" maxlength="4" pattern="\d*" inputmode="numeric" />
-                        @if (isAdminUser)
-                        {
-                            <div class="form-check form-switch dashboard-inline-toggle mb-0" title="Solo mis diagnósticos">
-                                <InputCheckbox class="form-check-input" id="onlyMineToggle" @bind-Value="onlyMyDiagnostics" />
-                            </div>
-                        }
-                    </div>
-                    <small class="dashboard-chart-copy">Escriba de 1 a 4 dígitos para filtrar en tiempo real (ej. 4, 43, 4532).</small>
-                </div>
-            </div>
-
-            <div class="table-responsive diag-history-table" style="background:transparent;overflow-y:auto;">
-                @if (diagnostics == null)
-                {
-                    <div class="py-4 text-slate-400">Cargando...</div>
-                }
-                else if (!diagnostics.Any())
-                {
-                    <div class="py-4 text-slate-400">No hay diagnósticos guardados.</div>
-                }
-                else if (!FilteredDiagnostics.Any() && !string.IsNullOrWhiteSpace(filterLast4))
-                {
-                    <div class="min-h-[240px] flex items-center justify-center text-center">
-                        <p class="text-slate-400 mb-0">No se encontraron diagnósticos para la tarjeta ingresada.</p>
-                    </div>
-                }
-                else
-                {
-                    <table class="table table-borderless align-middle">
+            }
+            else
+            {
+                <div class="hist-table-scroll">
+                    <table class="table hist-table m-0">
                         <thead>
-                            <tr class="text-slate-400 small bg-transparent">
-                                <th class="ps-3 text-slate-300">ID Diagnóstico</th>
-                                <th class="text-slate-300">Fecha</th>
-                                @if (showCreatorColumn)
-                                {
-                                    <th class="text-slate-300">Operador</th>
-                                }
-                                <th class="text-slate-300">ID Transacción</th>
-                                <th class="text-slate-300">Error Original</th>
-                                <th class="text-slate-300">Tarjeta</th>
-                                <th class="text-slate-400 text-end pe-3">Acciones</th>
+                            <tr>
+                                <th scope="col">Fecha</th>
+                                <th scope="col">TX</th>
+                                <th scope="col">Tarjeta</th>
+                                <th scope="col">Motivo</th>
+                                <th scope="col">Operador</th>
+                                <th scope="col">Valoración</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var d in FilteredDiagnostics)
+                            @foreach (var row in _result.Rows)
                             {
-                                <tr class="bg-transparent">
-                                    <td class="ps-3 text-slate-200"><strong>@d.Id</strong></td>
-                                    <td class="text-slate-200">@d.CreatedAt.ToLocalTime().ToString("g")</td>
-                                    @if (showCreatorColumn)
-                                    {
-                                        <td class="text-slate-200 small">@GetCreatorEmail(d.CreatedByUserId)</td>
-                                    }
-                                    <td class="text-slate-200">@d.TransactionId</td>
-                                    <td class="text-slate-200 small">@GetTransactionError(d.TransactionId)</td>
-                                    <td class="text-slate-200 small">@FormatCard(d.CardLast4)</td>
-                                    <td class="text-end pe-3 d-flex align-items-center gap-2">
-                                        <button class="btn btn-ia" data-bs-toggle="tooltip" title="Ver diagnóstico" @onclick="() => OpenDiagnostic(d.Id)"><span class="bi bi-eye" aria-hidden="true"></span></button>
-                                        <button class="btn btn-sm export-btn" data-bs-toggle="tooltip" title="Descargar JSON" @onclick="() => DownloadDiagnosticJsonByIdAsync(d.Id)"><span class="bi bi-download" aria-hidden="true"></span></button>
-                                        <button class="btn btn-sm export-btn" data-bs-toggle="tooltip" title="Descargar PDF" @onclick="() => ExportDiagnosticPdfByIdAsync(d.Id)"><span class="bi bi-printer" aria-hidden="true"></span></button>
+                                var selected = row.Id == _selectedId;
+                                <tr @key="row.Id" class="hist-row @(selected ? "is-selected" : "")" aria-selected="@(selected ? "true" : "false")"
+                                    @onclick="() => SelectAsync(row.Id)">
+                                    <td class="hist-cell-link">
+                                        <a href="diagnostics-history#diagnostico-@row.Id" class="hist-row-link mono" aria-current="@(selected ? "true" : null)"
+                                           aria-label="Ver diagnóstico de la TX @row.TransactionId del @HistoryFormat.ShortDate(row.CreatedAtUtc)"
+                                           @onclick="() => SelectAsync(row.Id)" @onclick:preventDefault @onclick:stopPropagation>@HistoryFormat.ShortDate(row.CreatedAtUtc)</a>
+                                    </td>
+                                    <td class="mono">@row.TransactionId</td>
+                                    <td class="mono">@HistoryFormat.Card(row.CardLast4)</td>
+                                    <td><span class="hist-reason"><span class="dot dot-sm dot-danger" aria-hidden="true"></span>@HistoryFormat.Reason(row.Reason)</span></td>
+                                    <td class="hist-muted">@OperatorName.Short(row.OperatorEmail)</td>
+                                    <td>
+                                        @switch (row.UserVote)
+                                        {
+                                            case true:
+                                                <span class="hist-vote-cell"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Útil</span>
+                                                break;
+                                            case false:
+                                                <span class="hist-vote-cell">No útil</span>
+                                                break;
+                                            default:
+                                                <span class="hist-muted">Sin votar</span>
+                                                break;
+                                        }
                                     </td>
                                 </tr>
                             }
                         </tbody>
                     </table>
-                }
-            </div>
-        </div>
+                </div>
+                <div class="hist-pager">
+                    <span>Mostrando @_result.FirstIndex–@_result.LastIndex de @_result.Total</span>
+                    <div class="hist-pager-buttons">
+                        <button type="button" class="btn-ds btn-ds-secondary hist-pager-btn" disabled="@(!_result.HasPrevious || _loading)" @onclick="() => GoToPageAsync(_result.Page - 1)">Anterior</button>
+                        <button type="button" class="btn-ds btn-ds-secondary hist-pager-btn" disabled="@(!_result.HasNext || _loading)" @onclick="() => GoToPageAsync(_result.Page + 1)">Siguiente</button>
+                    </div>
+                </div>
+            }
+        </section>
+
+        @if (_detail is not null && _result is { Total: > 0 })
+        {
+            <DiagnosticDetailPanel Detail="@_detail" UserId="@_userId" OnVoted="OnVoted"
+                                   OnExportPdf="ExportPdfAsync" OnExportJson="ExportJsonAsync" ExportNotice="@_exportNotice" />
+        }
     </div>
 </div>
-
-@* Diagnostic drawer: always rendered, visibility/animation driven by the .open class *@
-<div class="diag-drawer-backdrop @(activeDiagnostic != null ? "open" : "")" @onclick="CloseDiagnostic"></div>
-<aside @ref="drawerRef" class="diag-drawer @(activeDiagnostic != null ? "open" : "")" tabindex="0" @onkeydown="HandleDrawerKeyDown" role="dialog" aria-hidden="@(activeDiagnostic != null ? "false" : "true")">
-    @if (activeDiagnostic != null)
-    {
-        <div class="diag-drawer-header">
-            <h5 class="diag-drawer-title mb-0">Diagnóstico: @activeDiagnostic.Id</h5>
-            <div class="diag-drawer-actions">
-                <button class="btn btn-sm export-btn" data-bs-toggle="tooltip" title="Descargar JSON" @onclick="DownloadDiagnosticJsonAsync"><span class="bi bi-download me-1" aria-hidden="true"></span>JSON</button>
-                <button class="btn btn-sm export-btn" data-bs-toggle="tooltip" title="Descargar PDF" @onclick="ExportDiagnosticPdfAsync"><span class="bi bi-printer me-1" aria-hidden="true"></span>PDF</button>
-                <button type="button" class="diag-drawer-close" @onclick="CloseDiagnostic">✕</button>
-            </div>
-        </div>
-        <div class="diag-drawer-body">
-            <div class="diagnostic-content" style="font-family:Segoe UI, Roboto, Arial, sans-serif;">
-                @((MarkupString)RenderMarkdown(activeDiagnostic.Markdown))
-            </div>
-
-            <div class="d-flex justify-content-end mb-3">
-                <SmartOps.Web.Components.Layout.CopySuggestedMessageButton Markdown="@activeDiagnostic.Markdown" />
-            </div>
-
-            <div class="mt-4 p-3 rounded-4 dark-panel" style="border:1px solid rgba(148,163,184,0.14);">
-                <div class="text-cyan-300 small mb-3">¿El diagnóstico fue útil?</div>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <button class="@FeedbackButtonClass(true)" disabled="@IsFeedbackSelected" @onclick="() => RateDiagnosticAsync(true)">👍 Sí</button>
-                    <button class="@FeedbackButtonClass(false)" disabled="@IsFeedbackSelected" @onclick="() => RateDiagnosticAsync(false)">👎 No</button>
-                    @if (showFeedbackThanks)
-                    {
-                        <span class="text-emerald-400 small ms-2 feedback-thanks">¡Gracias por tu feedback!</span>
-                    }
-                </div>
-            </div>
-        </div>
-    }
-</aside>
-
 </LoggingErrorBoundary>
 
 @code {
-    // JS helpers for download/print are injected below in the page markup
+    internal const string PopupBlockedNotice = "El navegador bloqueó la ventana del informe. Permití las ventanas emergentes para este sitio y probá de nuevo.";
 
-    private ElementReference drawerRef;
-    private List<Diagnostic>? diagnostics;
-    private Diagnostic? activeDiagnostic;
-    private SmartOps.Core.Entities.DiagnosticFeedback? activeFeedback;
-    private bool showCreatorColumn;
-    private bool isAdminUser;
-    private bool onlyMyDiagnostics;
-    private string? currentUserId;
-    private DateTime? filterFromDate;
-    private DateTime? filterToDate;
-    private string filterLast4 = string.Empty;
-    private readonly Dictionary<string, string> creatorEmailCache = new();
-    private bool showFeedbackSaved;
-    private bool showFeedbackThanks;
-    private bool isSavingFeedback;
+    private string? _userId;
+    private string? _userEmail;
+    private bool _canSeeAll;
 
-    private IEnumerable<Diagnostic> FilteredDiagnostics
-    {
-        get
-        {
-            var list = diagnostics ?? Enumerable.Empty<Diagnostic>();
-            return list.Where(d => SmartOps.Web.Services.DiagnosticsHistoryFilterHelper.Matches(
-                d,
-                filterLast4,
-                filterFromDate,
-                filterToDate,
-                onlyMyDiagnostics,
-                currentUserId,
-                isAdminUser));
-        }
-    }
+    private string _card = string.Empty;
+    private DateTime? _from;
+    private DateTime? _to;
+    private VoteFilter _vote = VoteFilter.All;
+    private bool _onlyMine;
 
-    private void OnFilterLast4Changed(ChangeEventArgs e)
-    {
-        filterLast4 = e.Value?.ToString() ?? string.Empty;
-        StateHasChanged();
-    }
+    private HistoryPage? _result;
+    private int _page = 1;
+    private bool _loading;
+    private int _loadVersion;
 
-    private string FormatCard(string? last4)
-    {
-        if (string.IsNullOrWhiteSpace(last4)) return "-";
-        return $"•••• {last4}";
-    }
+    private Guid? _selectedId;
+    private HistoryDetail? _detail;
+    private int _detailVersion;
+    private string? _exportNotice;
+
+    private HistoryFilters Filters => new(_card, _from, _to, _vote, _canSeeAll && _onlyMine);
+
     protected override async Task OnInitializedAsync()
-    {
-        await ReloadDiagnosticsAsync();
-    }
-
-    private async Task ReloadDiagnosticsAsync()
     {
         var auth = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = auth.User;
-        currentUserId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        isAdminUser = user?.IsInRole("Auditor") == true || user?.IsInRole("Admin") == true;
-        showCreatorColumn = isAdminUser;
+        _userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _userEmail = user.Identity?.Name;
+        _canSeeAll = user.IsInRole("Auditor") || user.IsInRole("Admin");
 
-        var query = Db.Diagnostics.AsQueryable();
-        if (!isAdminUser && !string.IsNullOrWhiteSpace(currentUserId))
+        await LoadAsync(1);
+    }
+
+    private async Task LoadAsync(int page)
+    {
+        var version = ++_loadVersion;
+        _loading = true;
+        try
         {
-            query = query.Where(d => d.CreatedByUserId == currentUserId);
+            var result = await DbGate.RunAsync(() => DiagnosticsHistoryQuery.GetPageAsync(Db, Filters, _userId, _canSeeAll, page));
+            if (version != _loadVersion) return;
+
+            _result = result;
+            _page = result.Page;
+            await ResolveSelectionAsync();
         }
-
-        diagnostics = await query.OrderByDescending(d => d.CreatedAt).Take(200).ToListAsync();
-
-        var creatorIds = diagnostics
-            .Where(d => !string.IsNullOrWhiteSpace(d.CreatedByUserId))
-            .Select(d => d.CreatedByUserId!)
-            .Distinct()
-            .ToList();
-
-        foreach (var creatorId in creatorIds)
+        catch (Exception ex)
         {
-            var creator = await UserManager.FindByIdAsync(creatorId);
-            creatorEmailCache[creatorId] = creator?.Email ?? creatorId;
+            Logger.LogError(ex, "Failed to load the diagnostics history");
+            if (version == _loadVersion) _result ??= new HistoryPage(Array.Empty<HistoryRow>(), 0, 1, DiagnosticsHistoryQuery.DefaultPageSize);
+        }
+        finally
+        {
+            if (version == _loadVersion) _loading = false;
         }
     }
 
-    private string GetTransactionError(int txId)
+    // Al entrar se selecciona el primero; al cambiar de página o de filtros, si el seleccionado ya no está
+    // visible, el primero visible (HistorySelection.Resolve).
+    private async Task ResolveSelectionAsync()
     {
-        var tx = Db.Transactions.Find(txId);
-        return tx?.ErrorMessage ?? "-";
-    }
+        var rows = _result?.Rows ?? Array.Empty<HistoryRow>();
+        var next = HistorySelection.Resolve(_selectedId, rows.Select(r => r.Id).ToList());
 
-    private async Task OpenDiagnostic(Guid id)
-    {
-        // Reload from DB to ensure persisted feedback state is available
-        activeDiagnostic = await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == id);
-        // Fallback to in-memory list if not found
-        if (activeDiagnostic == null)
+        if (next is null)
         {
-            activeDiagnostic = diagnostics?.FirstOrDefault(d => d.Id == id);
-        }
-        showFeedbackSaved = false;
-        activeFeedback = await LoadCurrentUserFeedbackAsync(id);
-
-        // Focus the drawer so keyboard events (Escape) are captured immediately
-        try { await drawerRef.FocusAsync(); } catch { /* element may not be focusable yet on first render */ }
-    }
-
-    private void CloseDiagnostic()
-    {
-        activeDiagnostic = null;
-        activeFeedback = null;
-        showFeedbackSaved = false;
-    }
-
-    private void HandleDrawerKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Escape") CloseDiagnostic();
-    }
-
-    private string GetSuggestedMessage(string markdown)
-    {
-        if (string.IsNullOrWhiteSpace(markdown))
-        {
-            return "-";
-        }
-
-        var marker = "## 📨 Mensaje sugerido para el cliente";
-        var index = markdown.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (index < 0)
-        {
-            return "-";
-        }
-
-        var content = markdown.Substring(index + marker.Length).Trim();
-        var nextHeading = content.IndexOf("## ", StringComparison.OrdinalIgnoreCase);
-        if (nextHeading >= 0)
-        {
-            content = content.Substring(0, nextHeading).Trim();
-        }
-
-        return string.IsNullOrWhiteSpace(content) ? "-" : content;
-    }
-
-    private string FeedbackButtonClass(bool helpful)
-    {
-        var active = activeFeedback != null && activeFeedback.IsUseful == helpful;
-        return active ? "btn btn-sm feedback-btn active" : "btn btn-sm feedback-btn";
-    }
-
-    private bool IsFeedbackSelected => isSavingFeedback || activeFeedback != null;
-
-    private async Task<SmartOps.Core.Entities.DiagnosticFeedback?> LoadCurrentUserFeedbackAsync(Guid diagnosticId)
-    {
-        var state = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = state.User;
-        if (user?.Identity == null || !user.Identity.IsAuthenticated)
-        {
-            return null;
-        }
-
-        var userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrWhiteSpace(userId))
-        {
-            return null;
-        }
-
-        return await Db.DiagnosticFeedback.FirstOrDefaultAsync(x => x.DiagnosticId == diagnosticId && x.UserId == userId);
-    }
-
-    private async Task RateDiagnosticAsync(bool helpful)
-    {
-        if (activeDiagnostic == null || isSavingFeedback)
-        {
+            _selectedId = null;
+            _detail = null;
             return;
         }
 
-        isSavingFeedback = true;
-        showFeedbackThanks = true;
+        if (next == _selectedId && _detail is not null) return;
+        await ShowDetailAsync(rows.First(r => r.Id == next));
+    }
+
+    private async Task SelectAsync(Guid id)
+    {
+        if (id == _selectedId) return;
+        var row = _result?.Rows.FirstOrDefault(r => r.Id == id);
+        if (row is null) return;
+        await ShowDetailAsync(row);
+    }
+
+    private async Task ShowDetailAsync(HistoryRow row)
+    {
+        var version = ++_detailVersion;
+        _selectedId = row.Id;
+        _exportNotice = null;
+        _detail = HistoryDetail.FromRow(row);
         StateHasChanged();
 
         try
         {
-            string? userId = null;
-            var state = await AuthStateProvider.GetAuthenticationStateAsync();
-            var user = state.User;
-            if (user?.Identity != null && user.Identity.IsAuthenticated)
-            {
-                userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            }
-
-            if (!string.IsNullOrWhiteSpace(userId))
-            {
-                // Servicio compartido con el Drawer: crea o cambia el voto (con reintento como UPDATE
-                // ante un voto concurrente) y mantiene el campo legado Diagnostic.WasHelpful.
-                activeFeedback = await FeedbackService.VoteAsync(activeDiagnostic.Id, userId, helpful);
-                showFeedbackSaved = true;
-            }
+            var markdown = await DbGate.RunAsync(() => Db.Diagnostics.AsNoTracking()
+                .Where(d => d.Id == row.Id)
+                .Select(d => d.Markdown)
+                .FirstOrDefaultAsync());
+            if (version != _detailVersion) return;
+            _detail = HistoryDetail.FromRow(row, markdown ?? string.Empty);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "No se pudo guardar el voto del diagnóstico {DiagnosticId}", activeDiagnostic.Id);
-            showFeedbackThanks = false;
-        }
-        finally
-        {
-            isSavingFeedback = false;
-            StateHasChanged();
-            await Task.Delay(1600);
-            showFeedbackThanks = false;
-            StateHasChanged();
+            Logger.LogError(ex, "Failed to load diagnostic {Id}", row.Id);
+            if (version == _detailVersion) _detail = HistoryDetail.FromRow(row, string.Empty);
         }
     }
 
-    private string GetCreatorEmail(string? creatorUserId)
+    private async Task OnCardInputAsync(ChangeEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(creatorUserId))
+        _card = e.Value?.ToString() ?? string.Empty;
+        await ApplyFiltersAsync();
+    }
+
+    private Task ApplyFiltersAsync() => LoadAsync(1);
+
+    private Task GoToPageAsync(int page) => LoadAsync(page);
+
+    private Task ClearFiltersAsync()
+    {
+        _card = string.Empty;
+        _from = null;
+        _to = null;
+        _vote = VoteFilter.All;
+        _onlyMine = false;
+        return LoadAsync(1);
+    }
+
+    // El voto se guardó en el panel: se refleja en la columna Valoración sin recargar la página (la fila no
+    // desaparece aunque el filtro activo ya no la incluya; se va al cambiar de página o de filtros).
+    private void OnVoted((Guid DiagnosticId, bool IsUseful) vote)
+    {
+        if (_result is null) return;
+        var rows = _result.Rows.Select(r => r.Id == vote.DiagnosticId ? r with { UserVote = vote.IsUseful } : r).ToList();
+        _result = _result with { Rows = rows };
+    }
+
+    private async Task ExportPdfAsync()
+    {
+        if (_selectedId is not { } id) return;
+        _exportNotice = null;
+
+        try
         {
-            return "-";
+            var html = await ReportService.BuildHtmlAsync(id, _userId, _userEmail, Navigation.BaseUri);
+            if (html is null) return;
+            var opened = await JS.InvokeAsync<bool>("smartOpsOpenPrintView", html);
+            if (!opened) _exportNotice = PopupBlockedNotice;
         }
-
-        if (creatorEmailCache.TryGetValue(creatorUserId, out var email))
+        catch (Exception ex)
         {
-            return email;
+            Logger.LogError(ex, "Failed to export the PDF of diagnostic {Id}", id);
+            _exportNotice = "No se pudo generar el informe. Probá de nuevo.";
         }
-
-        return creatorUserId;
     }
 
-    private string RenderMarkdown(string md)
+    private async Task ExportJsonAsync()
     {
-        if (string.IsNullOrWhiteSpace(md)) return string.Empty;
-        var encoded = System.Net.WebUtility.HtmlEncode(md);
-        var lines = encoded.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        var sb = new System.Text.StringBuilder();
-        bool inList = false;
+        if (_selectedId is not { } id) return;
+        _exportNotice = null;
 
-        foreach (var raw in lines)
+        try
         {
-            var line = raw.Trim();
-            if (line.StartsWith("## "))
-            {
-                if (inList) { sb.AppendLine("</ul>"); inList = false; }
-                sb.AppendLine($"<h4>{line.Substring(3).Trim()}</h4>");
-                continue;
-            }
-            if (line.StartsWith("- "))
-            {
-                if (!inList) { sb.AppendLine("<ul style=\"margin-left:1rem;padding-left:1rem\">\n"); inList = true; }
-                sb.AppendLine($"<li>{line.Substring(2).Trim()}</li>");
-                continue;
-            }
-            if (inList) { sb.AppendLine("</ul>"); inList = false; }
-            sb.AppendLine($"<p>{line}</p>");
+            var diagnostic = await DbGate.RunAsync(() => Db.Diagnostics.AsNoTracking().FirstOrDefaultAsync(d => d.Id == id));
+            if (diagnostic is null) return;
+            var (fileName, json) = DiagnosticJsonExport.Build(diagnostic);
+            await JS.InvokeVoidAsync("smartOpsDownloadFile", fileName, "application/json", json);
         }
-        if (inList) sb.AppendLine("</ul>");
-        return sb.ToString();
-    }
-
-    private async Task DownloadDiagnosticJsonAsync()
-    {
-        if (activeDiagnostic == null) return;
-
-        var payload = new
+        catch (Exception ex)
         {
-            id = activeDiagnostic.Id,
-            createdAt = activeDiagnostic.CreatedAt,
-            transactionId = activeDiagnostic.TransactionId,
-            cardLast4 = activeDiagnostic.CardLast4,
-            markdown = activeDiagnostic.Markdown,
-            summary = activeDiagnostic.Summary,
-            suggestedMessage = GetSuggestedMessage(activeDiagnostic.Markdown)
-        };
-
-        var json = System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-        var filename = $"diagnostico-{activeDiagnostic.TransactionId}.json";
-        await JS.InvokeVoidAsync("smartOpsDownloadFile", filename, "application/json", json);
-    }
-
-    private async Task ExportDiagnosticPdfAsync()
-    {
-        if (activeDiagnostic == null) return;
-
-        // Build printable HTML using a StringBuilder to avoid Razor parsing issues.
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("<!doctype html>");
-        sb.AppendLine("<html>");
-        sb.AppendLine("<head>");
-        sb.AppendLine("<meta charset='utf-8' />");
-        sb.AppendLine($"<title>Diagnóstico {activeDiagnostic.Id}</title>");
-        sb.AppendLine("<style>");
-        sb.AppendLine("body { background: #1e2330; color: #e6eef8; font-family: Segoe UI, Roboto, Arial, sans-serif; padding: 20px; }");
-        sb.AppendLine(".box { background: #0f1724; padding: 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.04); }");
-        sb.AppendLine("h1 { font-size: 18px; margin: 0 0 8px 0; }");
-        sb.AppendLine("</style>");
-        sb.AppendLine("</head>");
-        sb.AppendLine("<body>");
-        sb.AppendLine("<div class='box'>");
-        sb.AppendLine($"<h1>Diagnóstico: {activeDiagnostic.Id}</h1>");
-        sb.AppendLine($"<p><strong>Fecha:</strong> {activeDiagnostic.CreatedAt.ToLocalTime():g}</p>");
-        sb.AppendLine($"<p><strong>ID Transacción:</strong> {activeDiagnostic.TransactionId}</p>");
-        sb.AppendLine($"<p><strong>Tarjeta:</strong> {FormatCard(activeDiagnostic.CardLast4)}</p>");
-        sb.AppendLine("<hr/>");
-        sb.AppendLine($"<div>{System.Net.WebUtility.HtmlEncode(activeDiagnostic.Markdown).Replace("\n", "<br/>")}</div>");
-        sb.AppendLine("</div>");
-        sb.AppendLine("</body>");
-        sb.AppendLine("</html>");
-
-        var html = sb.ToString();
-        await JS.InvokeVoidAsync("smartOpsOpenPrintView", html);
-    }
-
-    private async Task DownloadDiagnosticJsonByIdAsync(Guid id)
-    {
-        var diag = diagnostics?.FirstOrDefault(d => d.Id == id) ?? await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == id);
-        if (diag == null) return;
-
-        var payload = new
-        {
-            id = diag.Id,
-            createdAt = diag.CreatedAt,
-            transactionId = diag.TransactionId,
-            cardLast4 = diag.CardLast4,
-            markdown = diag.Markdown,
-            summary = diag.Summary,
-            suggestedMessage = GetSuggestedMessage(diag.Markdown)
-        };
-
-        var json = System.Text.Json.JsonSerializer.Serialize(payload, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-        var filename = $"diagnostico-{diag.TransactionId}.json";
-        await JS.InvokeVoidAsync("smartOpsDownloadFile", filename, "application/json", json);
-    }
-
-    private async Task ExportDiagnosticPdfByIdAsync(Guid id)
-    {
-        var diag = diagnostics?.FirstOrDefault(d => d.Id == id) ?? await Db.Diagnostics.FirstOrDefaultAsync(d => d.Id == id);
-        if (diag == null) return;
-
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine("<!doctype html>");
-        sb.AppendLine("<html>");
-        sb.AppendLine("<head>");
-        sb.AppendLine("<meta charset='utf-8' />");
-        sb.AppendLine($"<title>Diagnóstico {diag.Id}</title>");
-        sb.AppendLine("<style>");
-        sb.AppendLine("body { background: #1e2330; color: #000000; font-family: Segoe UI, Roboto, Arial, sans-serif; padding: 20px; }");
-        sb.AppendLine(".box { background: #ffffff; padding: 16px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.06); }");
-        sb.AppendLine("h1 { font-size: 18px; margin: 0 0 8px 0; color:#0f1724 }");
-        sb.AppendLine("</style>");
-        sb.AppendLine("</head>");
-        sb.AppendLine("<body>");
-        sb.AppendLine("<div class='box'>");
-        sb.AppendLine($"<h1>Diagnóstico: {diag.Id}</h1>");
-        sb.AppendLine($"<p><strong>Fecha:</strong> {diag.CreatedAt.ToLocalTime():g}</p>");
-        sb.AppendLine($"<p><strong>ID Transacción:</strong> {diag.TransactionId}</p>");
-        sb.AppendLine($"<p><strong>Tarjeta:</strong> {FormatCard(diag.CardLast4)}</p>");
-        sb.AppendLine("<hr/>");
-        sb.AppendLine($"<div>{System.Net.WebUtility.HtmlEncode(diag.Markdown).Replace("\n", "<br/>")}</div>");
-        sb.AppendLine("</div>");
-        sb.AppendLine("</body>");
-        sb.AppendLine("</html>");
-
-        var html = sb.ToString();
-        await JS.InvokeVoidAsync("smartOpsOpenPrintView", html);
+            Logger.LogError(ex, "Failed to export the JSON of diagnostic {Id}", id);
+            _exportNotice = "No se pudo exportar el JSON. Probá de nuevo.";
+        }
     }
 }
-
-@* Inline JS helpers *@
-<script>
-    window.smartOpsDownloadFile = function (filename, mime, content) {
-        try {
-            const blob = new Blob([content], { type: mime });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 5000);
-        } catch (e) {
-            console.error('Download failed', e);
-        }
-    };
-
-    window.smartOpsOpenPrintView = function (htmlContent) {
-        const w = window.open('', '_blank');
-        if (!w) {
-            alert('No se pudo abrir la ventana de impresión. Permitir ventanas emergentes?');
-            return;
-        }
-        w.document.open();
-        w.document.write(htmlContent);
-        w.document.close();
-        setTimeout(() => w.print(), 500);
-    };
-</script>
-
-<script>
-    // Initialize Bootstrap tooltips for this page's buttons
-    document.addEventListener('DOMContentLoaded', function () {
-        try {
-            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-            tooltipTriggerList.forEach(function (el) { new bootstrap.Tooltip(el); });
-        } catch (e) {
-            // bootstrap may not be present; ignore silently
-            console.debug('Bootstrap tooltip init failed', e);
-        }
-    });
-</script>

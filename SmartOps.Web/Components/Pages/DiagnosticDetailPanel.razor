@@ -1,0 +1,140 @@
+@using System.Globalization
+@using SmartOps.Web.Services
+@using SmartOps.Web.Components.Shared
+@inject DiagnosticFeedbackService FeedbackService
+@inject Microsoft.Extensions.Logging.ILogger<DiagnosticDetailPanel> Logger
+
+@* Panel de detalle del Historial (docs/redesign/04-historial.html). *@
+<aside class="hist-panel" aria-labelledby="hist-panel-title">
+    <div class="hist-panel-head">
+        <div class="hist-panel-title-row">
+            <h2 class="hist-panel-title" id="hist-panel-title">Diagnóstico de TX @Detail.TransactionId</h2>
+            <span class="status-chip status-chip-ready">IA</span>
+        </div>
+        <span class="hist-panel-id mono">@Detail.Id</span>
+    </div>
+
+    <dl class="hist-panel-data">
+        <div><dt>Fecha</dt><dd class="mono">@HistoryFormat.ToLocal(Detail.CreatedAtUtc).ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture)</dd></div>
+        <div><dt>Operador</dt><dd>@(string.IsNullOrWhiteSpace(Detail.OperatorEmail) ? "—" : Detail.OperatorEmail)</dd></div>
+        <div><dt>Tarjeta</dt><dd class="mono">@HistoryFormat.Card(Detail.CardLast4)</dd></div>
+        <div><dt>Motivo</dt><dd>@HistoryFormat.Reason(Detail.Reason)</dd></div>
+    </dl>
+
+    <div class="hist-panel-body">
+        @if (Detail.Markdown is null)
+        {
+            <p class="hist-muted m-0" role="status">Cargando diagnóstico…</p>
+        }
+        else
+        {
+            <DiagnosticSections Markdown="@Detail.Markdown" />
+        }
+
+        <div class="hist-vote">
+            <span class="hist-muted" id="hist-vote-label">¿Te sirvió este diagnóstico?</span>
+            <div class="hist-vote-buttons" role="group" aria-labelledby="hist-vote-label">
+                <button type="button" class="btn-ds btn-ds-secondary hist-vote-btn @(_vote == true ? "is-selected" : "")"
+                        aria-pressed="@(_vote == true ? "true" : "false")" disabled="@_saving" @onclick="() => VoteAsync(true)">Sí</button>
+                <button type="button" class="btn-ds btn-ds-secondary hist-vote-btn @(_vote == false ? "is-selected" : "")"
+                        aria-pressed="@(_vote == false ? "true" : "false")" disabled="@_saving" @onclick="() => VoteAsync(false)">No</button>
+            </div>
+            @if (_voteError)
+            {
+                <p class="hist-muted hist-vote-error m-0" role="alert">No se pudo guardar tu voto. Probá de nuevo.</p>
+            }
+        </div>
+    </div>
+
+    <div class="hist-panel-foot">
+        <button type="button" class="btn-ds btn-ds-secondary hist-export-btn" @onclick="OnExportPdf">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6"></path><rect x="6" y="14" width="12" height="7"></rect><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path></svg>
+            Descargar PDF
+        </button>
+        <button type="button" class="btn-ds btn-ds-secondary hist-export-btn" @onclick="OnExportJson">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"></path></svg>
+            Exportar JSON
+        </button>
+        @if (!string.IsNullOrEmpty(ExportNotice))
+        {
+            <p class="hist-muted hist-export-notice m-0" role="alert">@ExportNotice</p>
+        }
+    </div>
+</aside>
+
+@code {
+    /// <summary>Diagnóstico seleccionado. <see cref="HistoryDetail.Markdown"/> null mientras se carga.</summary>
+    [Parameter, EditorRequired] public HistoryDetail Detail { get; set; } = default!;
+
+    /// <summary>Usuario actual: su voto se lee y se guarda con DiagnosticFeedbackService.</summary>
+    [Parameter] public string? UserId { get; set; }
+
+    /// <summary>Se dispara con el voto guardado, para que la tabla actualice la columna Valoración.</summary>
+    [Parameter] public EventCallback<(Guid DiagnosticId, bool IsUseful)> OnVoted { get; set; }
+
+    [Parameter] public EventCallback OnExportPdf { get; set; }
+    [Parameter] public EventCallback OnExportJson { get; set; }
+
+    /// <summary>Aviso de la exportación (p. ej. el navegador bloqueó la ventana del PDF).</summary>
+    [Parameter] public string? ExportNotice { get; set; }
+
+    private Guid _loadedId;
+    private int _version;
+    private bool? _vote;
+    private bool _saving;
+    private bool _voteError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Detail.Id == _loadedId) return;
+
+        _loadedId = Detail.Id;
+        var version = ++_version;
+        _vote = null;
+        _saving = false;
+        _voteError = false;
+
+        try
+        {
+            var vote = await FeedbackService.GetUserVoteAsync(Detail.Id, UserId);
+            if (version == _version) _vote = vote;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load the user's vote for diagnostic {Id}", Detail.Id);
+        }
+    }
+
+    private async Task VoteAsync(bool isUseful)
+    {
+        if (_saving) return;
+
+        if (string.IsNullOrWhiteSpace(UserId))
+        {
+            _voteError = true;
+            return;
+        }
+
+        var version = _version;
+        var id = Detail.Id;
+        _saving = true;
+        _voteError = false;
+
+        try
+        {
+            var feedback = await FeedbackService.VoteAsync(id, UserId, isUseful);
+            if (version != _version) return;
+            _vote = feedback.IsUseful;
+            await OnVoted.InvokeAsync((id, feedback.IsUseful));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to save vote for diagnostic {Id}", id);
+            if (version == _version) _voteError = true;
+        }
+        finally
+        {
+            if (version == _version) _saving = false;
+        }
+    }
+}
