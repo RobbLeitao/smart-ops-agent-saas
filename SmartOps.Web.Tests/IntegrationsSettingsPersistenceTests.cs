@@ -50,6 +50,7 @@ namespace SmartOps.Web.Tests
                 pK.Value = "Integrations.Provider"; pV.Value = "OpenAI"; cmd.ExecuteNonQuery();
                 pK.Value = "Integrations.ApiKey"; pV.Value = "sk-test"; cmd.ExecuteNonQuery();
                 pK.Value = "Integrations.ModelId"; pV.Value = "gpt-4o"; cmd.ExecuteNonQuery();
+                pK.Value = "Integrations.Endpoint"; pV.Value = "https://api.groq.com/openai/v1"; cmd.ExecuteNonQuery();
 
                 tran.Commit();
             }
@@ -69,6 +70,10 @@ namespace SmartOps.Web.Tests
                 cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.ModelId"; cmd.Parameters.Add(p);
                 var model = cmd.ExecuteScalar() as string;
                 Assert.Equal("gpt-4o", model);
+
+                cmd.Parameters.Clear(); p = cmd.CreateParameter(); p.ParameterName = "@k"; p.Value = "Integrations.Endpoint"; cmd.Parameters.Add(p);
+                var endpoint = cmd.ExecuteScalar() as string;
+                Assert.Equal("https://api.groq.com/openai/v1", endpoint);
             }
         }
 
