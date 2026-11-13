@@ -31,3 +31,10 @@
 
 .copy-note { color: #94a3b8; }
 .copy-error { color: #fca5a5; }
+
+/* Variante del rediseño (Drawer de Detalle): solo tokens. */
+.copy-wrap-ds { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.copy-btn-ds.copied { border-color: var(--ai-border); color: var(--ai-text); }
+.copy-btn-ds.failed { border-color: var(--danger-border); }
+.copy-wrap-ds .copy-note,
+.copy-wrap-ds .copy-error { color: var(--text-muted); font-size: 13px; }

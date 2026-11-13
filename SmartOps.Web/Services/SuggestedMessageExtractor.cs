@@ -64,7 +64,7 @@ namespace SmartOps.Web.Services
             return true;
         }
 
-        private static bool IsCustomerMessageHeading(string line)
+        internal static bool IsCustomerMessageHeading(string line)
         {
             var heading = GetHeadingText(line);
             if (heading is null)
@@ -88,7 +88,11 @@ namespace SmartOps.Web.Services
                    || normalized.Contains("causa") || normalized.Contains("recomendacion");
         }
 
-        private static string? GetHeadingText(string line)
+        internal static bool IsAtxHeading(string line) => AtxHeading.IsMatch(line);
+
+        internal static bool IsHorizontalRule(string line) => HorizontalRule.IsMatch(line);
+
+        internal static string? GetHeadingText(string line)
         {
             var atx = AtxHeading.Match(line);
             if (atx.Success) return atx.Groups["text"].Value;
@@ -133,7 +137,7 @@ namespace SmartOps.Web.Services
         }
 
         // Lowercase, without accents, emojis or punctuation: "📨 Mensaje Sugerido" -> "mensaje sugerido".
-        private static string Normalize(string text)
+        internal static string Normalize(string text)
         {
             var decomposed = text.ToLowerInvariant().Normalize(NormalizationForm.FormD);
             var sb = new StringBuilder(decomposed.Length);

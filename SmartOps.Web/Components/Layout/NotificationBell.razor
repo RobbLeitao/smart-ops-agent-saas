@@ -90,6 +90,10 @@
     {
         if (firstRender)
         {
+            // El Drawer de Detalle va por encima de todo: cuando se abre, el desplegable se cierra.
+            DrawerService.Register(OnDrawerChanged);
+            _drawerRegistered = true;
+
             // Safe to start SignalR here — OnAfterRenderAsync only runs in interactive mode,
             // never during SSR pre-render.
             hubConnection = new HubConnectionBuilder()
@@ -178,6 +182,15 @@
         open = false;
     }
 
+    private bool _drawerRegistered;
+
+    private void OnDrawerChanged(TransactionDto? dto)
+    {
+        if (dto == null || !open) return;
+        open = false;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
     private void HandleKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Escape") Close();
@@ -237,6 +250,7 @@
 
     public async ValueTask DisposeAsync()
     {
+                if (_drawerRegistered) DrawerService.Unregister(OnDrawerChanged);
                 if (hubConnection != null)
                 {
                     await hubConnection.DisposeAsync();

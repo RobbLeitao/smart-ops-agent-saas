@@ -15,7 +15,11 @@
     --primary: #e8eaed;
     --on-primary: #0b0d10;
     --danger: #f0616d;
+    --danger-surface: #22141a;
+    --danger-border: #5a2a30;
     --success: #3fb68b;
+    --success-surface: #0f1a16;
+    --success-border: #1f3b30;
     --ai: #9b8cff;
     --ai-text: #c9c2ff;
     --ai-surface: #1a1830;

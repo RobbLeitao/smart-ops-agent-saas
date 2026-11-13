@@ -1,265 +1,447 @@
+@using System.Globalization
+@using SmartOps.Core.Entities
 @using SmartOps.Web.Services
-@using System.Text.RegularExpressions
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Components.Authorization
 @inject TransactionDrawerService DrawerService
 @inject SmartOps.Infrastructure.Data.AppDbContext Db
-@inject SmartOps.Web.Services.DiagnosticOrchestratorService Orchestrator
+@inject DbContextGate DbGate
+@inject DiagnosticOrchestratorService Orchestrator
+@inject DiagnosticFeedbackService FeedbackService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject Microsoft.Extensions.Logging.ILogger<TransactionDetailDrawer> Logger
 @implements IDisposable
 
-<div class="drawer-backdrop @(IsOpen ? "open" : "")" @onclick="Close"></div>
-<aside class="drawer @(IsOpen ? "open" : "")" tabindex="0" @ref="drawerRef" @onkeydown="HandleKeyDown" role="dialog" aria-hidden="@(IsOpen?"false":"true")">
-  <div class="drawer-header">
-    <div class="header-left">
-      <div class="tx-id">TX #@(_dto?.Id)</div>
-      <div class="status-badge @(IsError ? "error" : "success")">@(_dto?.Status ?? "—")</div>
-    </div>
-    <div class="header-actions">
-      @if (IsError && string.IsNullOrWhiteSpace(_diagnostic))
-      {
-        <button class="btn analyze" @onclick="Analyze" disabled="@_isAnalyzing">Analizar con IA</button>
-      }
-      <button class="btn close" @onclick="Close">✕</button>
-    </div>
-  </div>
-
-  <div class="drawer-body">
-    <div class="row"><div class="muted">Tarjeta</div><div>@(_dto?.CardLast4 ?? "----")</div></div>
-    <div class="row"><div class="muted">Timestamp</div><div>@(_dto?.Timestamp.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"))</div></div>
-    <div class="row"><div class="muted">Monto</div><div>@(_dto?.Amount.ToString("C"))</div></div>
-    <div class="row"><div class="muted">Canal</div><div>@(_dto?.Channel ?? "—")</div></div>
-
-    @if (IsError)
+@* Drawer de Detalle (docs/redesign/03-drawer-detalle.html): 4 estados del diagnóstico. *@
+<div class="drawer-backdrop @(IsOpen ? "open" : "")" @onclick="Close" aria-hidden="true"></div>
+<aside class="drawer @(IsOpen ? "open" : "")" tabindex="-1" @ref="drawerRef" @onkeydown="HandleKeyDown"
+       role="dialog" aria-modal="true" aria-labelledby="drawer-title"
+       aria-hidden="@(IsOpen ? "false" : "true")" inert="@(!IsOpen)">
+    @if (_dto is not null)
     {
-      <div class="row"><div class="muted">Código error</div><div>@(_dto?.ErrorCode ?? "—")</div></div>
+        <div class="drawer-header">
+            <div class="drawer-header-left">
+                <h2 class="drawer-title" id="drawer-title">TX @_dto.Id</h2>
+                <span class="drawer-status"><span class="dot @StatusDotClass" aria-hidden="true"></span>@StatusLabel</span>
+            </div>
+            <button type="button" class="drawer-close" aria-label="Cerrar detalle" @onclick="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+            </button>
+        </div>
 
-      <h4>Diagnóstico IA</h4>
-      <div class="diagnostic-box">
-        @if (_isAnalyzing)
-        {
-          <div class="drawer-loader @(_loaderClosing ? "closing" : "")">
-            <img src="/images/logo.png" alt="SmartOps" class="drawer-loader-logo" />
-            <div class="drawer-loader-text">Analizando con IA...</div>
-          </div>
-        }
-        else if (!string.IsNullOrWhiteSpace(_diagnostic))
-        {
-          @((MarkupString)RenderMarkdown(_diagnostic))
-        }
-        else if (!string.IsNullOrWhiteSpace(_analyzeError))
-        {
-          <p class="muted analyze-error">@_analyzeError</p>
-        }
-        else
-        {
-          <p class="muted">No hay diagnóstico aún.</p>
-        }
-      </div>
+        <div class="drawer-scroll">
+            <dl class="drawer-data">
+                <div class="drawer-field drawer-field-wide">
+                    <dt>Motivo</dt>
+                    <dd class="drawer-reason">
+                        @if (IsFailed)
+                        {
+                            <span class="dot dot-sm dot-danger" aria-hidden="true"></span>@(string.IsNullOrWhiteSpace(_dto.ErrorCode) ? DashboardMetricsHelper.UnknownReason : _dto.ErrorCode)
+                        }
+                        else
+                        {
+                            <span>—</span>
+                        }
+                    </dd>
+                </div>
+                <div class="drawer-field"><dt>Monto</dt><dd class="mono">@MoneyFormat.Format(_dto.Amount, _dto.Currency)</dd></div>
+                <div class="drawer-field"><dt>Tarjeta</dt><dd class="mono">@(string.IsNullOrWhiteSpace(_dto.CardLast4) ? "—" : $"•••• {_dto.CardLast4}")</dd></div>
+                <div class="drawer-field"><dt>Fecha</dt><dd class="mono">@ToLocal(_dto.Timestamp).ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture)</dd></div>
+                <div class="drawer-field"><dt>Canal</dt><dd>@(string.IsNullOrWhiteSpace(_dto.Channel) ? "—" : _dto.Channel)</dd></div>
+            </dl>
+
+            @if (IsFailed)
+            {
+                <section class="drawer-diag" aria-busy="@(_state == DiagState.Analyzing ? "true" : "false")" aria-labelledby="drawer-diag-title" data-state="@_state.ToString().ToLowerInvariant()">
+                    <div class="drawer-diag-head">
+                        <h3 class="drawer-section-title" id="drawer-diag-title">Diagnóstico IA</h3>
+                        @if (_state == DiagState.Ready && _diagnostic is not null)
+                        {
+                            <span class="status-chip status-chip-ready"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Listo · @ToLocal(_diagnostic.CreatedAt).ToString("HH:mm", CultureInfo.InvariantCulture)</span>
+                        }
+                    </div>
+
+                    @switch (_state)
+                    {
+                        case DiagState.Loading:
+                            <p class="drawer-muted m-0" role="status">Cargando diagnóstico…</p>
+                            break;
+
+                        case DiagState.Empty:
+                            <div class="drawer-empty">
+                                <p class="drawer-muted m-0">Todavía no hay diagnóstico para esta transacción. La IA analiza el motivo y propone qué hacer y qué decirle al cliente.</p>
+                                <button type="button" class="btn-ds btn-ds-primary" @onclick="AnalyzeAsync">Analizar con IA</button>
+                            </div>
+                            break;
+
+                        case DiagState.Analyzing:
+                            <div class="drawer-analyzing">
+                                <div class="drawer-analyzing-label" role="status">
+                                    <svg class="spinner-ring spinner-ai" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke-width="3"></circle><path d="M12 3a9 9 0 0 1 9 9" fill="none" stroke-width="3" stroke-linecap="round"></path></svg>
+                                    <span>Analizando con IA…</span>
+                                </div>
+                                <div class="drawer-ai-skeleton" aria-hidden="true">
+                                    <span style="width:40%"></span>
+                                    <span style="width:92%"></span>
+                                    <span style="width:78%"></span>
+                                    <span class="gap-before" style="width:36%"></span>
+                                    <span style="width:86%"></span>
+                                    <span style="width:64%"></span>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-ds btn-ds-secondary drawer-analyzing-btn" disabled>Analizando…</button>
+                            break;
+
+                        case DiagState.Ready when _diagnostic is not null:
+                            @if (_sections is { HasSections: true })
+                            {
+                                @if (!string.IsNullOrWhiteSpace(_sections.WhatHappened))
+                                {
+                                    <div class="drawer-block">
+                                        <h4 class="drawer-overline">Qué pasó</h4>
+                                        <div class="drawer-md">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections.WhatHappened))</div>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_sections.WhatToDo))
+                                {
+                                    <div class="drawer-block">
+                                        <h4 class="drawer-overline">Qué hacer</h4>
+                                        <div class="drawer-md drawer-steps">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections.WhatToDo))</div>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_sections.Other))
+                                {
+                                    <div class="drawer-block drawer-md drawer-other">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections.Other))</div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_sections.CustomerMessage))
+                                {
+                                    <div class="drawer-block drawer-block-message">
+                                        <h4 class="drawer-overline">Mensaje para el cliente</h4>
+                                        <div class="drawer-message drawer-md">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections.CustomerMessage))</div>
+                                        <CopySuggestedMessageButton Markdown="@_diagnostic.Markdown" Label="Copiar mensaje" Compact="true" />
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                @* Sin secciones reconocibles: el Markdown completo, renderizado (nunca crudo). *@
+                                <div class="drawer-md">@((MarkupString)DiagnosticMarkdown.ToHtml(_diagnostic.Markdown))</div>
+                            }
+
+                            @if (_diagnostic.Id != Guid.Empty)
+                            {
+                                <div class="drawer-vote">
+                                    <span class="drawer-muted" id="drawer-vote-label">¿Te sirvió este diagnóstico?</span>
+                                    <div class="drawer-vote-buttons" role="group" aria-labelledby="drawer-vote-label">
+                                        <button type="button" class="btn-ds btn-ds-secondary drawer-vote-btn @(_userVote == true ? "is-selected" : "")"
+                                                aria-pressed="@(_userVote == true ? "true" : "false")" disabled="@_savingVote" @onclick="() => VoteAsync(true)">Sí</button>
+                                        <button type="button" class="btn-ds btn-ds-secondary drawer-vote-btn @(_userVote == false ? "is-selected" : "")"
+                                                aria-pressed="@(_userVote == false ? "true" : "false")" disabled="@_savingVote" @onclick="() => VoteAsync(false)">No</button>
+                                    </div>
+                                    @if (_voteError)
+                                    {
+                                        <p class="drawer-muted drawer-vote-error m-0" role="alert">No se pudo guardar tu voto. Probá de nuevo.</p>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="drawer-muted drawer-note m-0">Este diagnóstico no se guardó en el Historial.</p>
+                            }
+                            break;
+
+                        case DiagState.Error:
+                            <div class="drawer-alert" role="alert">
+                                <svg class="drawer-alert-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.5"></path></svg>
+                                <div class="drawer-alert-body">
+                                    <span class="drawer-alert-title">No se pudo generar el diagnóstico</span>
+                                    <span class="drawer-alert-text">@_errorMessage</span>
+                                </div>
+                            </div>
+                            <div class="drawer-actions">
+                                <button type="button" class="btn-ds btn-ds-primary" @onclick="AnalyzeAsync">Reintentar</button>
+                                @if (_isAuditor)
+                                {
+                                    <a class="btn-ds btn-ds-secondary drawer-link" href="/integrations">Ir a Integraciones</a>
+                                }
+                            </div>
+                            @if (!_isAuditor)
+                            {
+                                <p class="drawer-muted drawer-note m-0">Avisale a un Auditor para revisar la configuración.</p>
+                            }
+                            <p class="drawer-muted drawer-note m-0">No se guardó nada en el Historial.</p>
+                            break;
+                    }
+                </section>
+            }
+        </div>
     }
-  </div>
 </aside>
 
 @code {
-    // Floor for how long the AI loader stays visible, even if the response arrives sooner
-    // than this (see Analyze()). Keeps the UI from "flashing" the loader imperceptibly.
-    private static readonly TimeSpan MinLoaderVisibleDuration = TimeSpan.FromMilliseconds(550);
+    // Tiempo mínimo que el estado «Analizando» queda visible aunque la IA responda al instante, para que
+    // no «parpadee». Se espera en el finally: aplica igual en éxito, error y timeout del proveedor.
+    // (El delay simulado del Local Simulator vive en AIOpsService y no se toca.)
+    internal static TimeSpan MinAnalyzingVisibleDuration = TimeSpan.FromMilliseconds(550);
 
-    // Must match the CSS "drawerLoaderFadeOut" animation duration, so the element stays
-    // mounted (with the "closing" class applied) exactly long enough for the fade-out to
-    // play before it's actually removed from the DOM.
-    private static readonly TimeSpan LoaderFadeOutDuration = TimeSpan.FromMilliseconds(220);
+    internal enum DiagState { Loading, Empty, Analyzing, Ready, Error }
+
+    private const string GenericError = "No logramos procesar el diagnóstico inteligente en este momento. Reintentá en unos instantes.";
 
     private TransactionDto? _dto;
-    private string? _diagnostic;
-    private string? _analyzeError;
-    private bool _isAnalyzing;
-    private bool _loaderClosing;
-    private bool IsOpen => _dto != null;
-    private bool IsError => _dto?.Status?.ToLowerInvariant().Contains("fail") ?? false;
+    private DiagState _state = DiagState.Loading;
+    private Diagnostic? _diagnostic;
+    private DiagnosticSections? _sections;
+    private string? _errorMessage;
+    private bool? _userVote;
+    private bool _savingVote;
+    private bool _voteError;
+
+    private string? _userId;
+    private bool _isAuditor;
+
+    // Cada apertura incrementa la versión: los resultados async de una transacción anterior se descartan.
+    private int _version;
+    private bool _focusPending;
+    private bool _registered;
     private ElementReference drawerRef;
 
-    protected override void OnInitialized()
-    {
-        Logger?.LogInformation("TransactionDetailDrawer OnInitialized (prerender or interactive)");
-    }
+    private bool IsOpen => _dto != null;
+    private bool IsFailed => TransactionStatus.IsFailed(_dto?.Status);
 
-    // Blazor only calls OnAfterRenderAsync on an interactive instance — it never runs
-    // during static SSR/prerender. Registering here (like NotificationBell does for its
-    // SignalR hub) guarantees we subscribe on the long-lived interactive instance and not
-    // on a prerender instance that gets disposed immediately after.
+    private string StatusLabel =>
+        IsFailed ? "Fallida" : TransactionStatus.IsApproved(_dto?.Status) ? "Aprobada" : (_dto?.Status ?? "—");
+
+    private string StatusDotClass =>
+        IsFailed ? "dot-danger" : TransactionStatus.IsApproved(_dto?.Status) ? "dot-success" : string.Empty;
+
+    // Blazor solo llama a OnAfterRenderAsync en la instancia interactiva (nunca en el prerender), así que
+    // registrarse acá garantiza suscribirse en la instancia que vive todo el circuito.
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            Logger?.LogInformation("OnAfterRenderAsync(firstRender): registering with DrawerService");
+            try
+            {
+                var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+                var user = auth.User;
+                if (user?.Identity?.IsAuthenticated == true)
+                {
+                    _userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                    _isAuditor = user.IsInRole("Auditor");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Drawer could not read the authentication state.");
+            }
+
+            _registered = true;
             DrawerService.Register(OnDrawerChange);
         }
 
-        if (IsOpen)
+        if (_focusPending && IsOpen)
         {
-            try { await drawerRef.FocusAsync(); } catch (Exception ex) { Logger?.LogDebug(ex, "FocusAsync failed"); }
+            _focusPending = false;
+            try { await drawerRef.FocusAsync(); } catch (Exception ex) { Logger.LogDebug(ex, "FocusAsync failed"); }
         }
     }
 
     private void OnDrawerChange(TransactionDto? dto)
     {
-        Logger?.LogInformation("TransactionDetailDrawer.OnDrawerChange invoked. NewId={Id}", dto?.Id.ToString() ?? "null");
+        var version = ++_version;
+        var wasOpen = _dto != null;
         _dto = dto;
         _diagnostic = null;
-        _analyzeError = null;
-        _isAnalyzing = false;
-        _loaderClosing = false;
-        InvokeAsync(StateHasChanged);
+        _sections = null;
+        _errorMessage = null;
+        _userVote = null;
+        _savingVote = false;
+        _voteError = false;
+        _state = DiagState.Loading;
+        _focusPending = dto != null && !wasOpen;
 
-        if (dto != null && dto.Status?.ToLowerInvariant().Contains("fail") == true)
+        _ = InvokeAsync(StateHasChanged);
+
+        if (dto != null && TransactionStatus.IsFailed(dto.Status))
         {
-            _ = LoadExistingDiagnosticAsync(dto.Id);
+            _ = InvokeAsync(() => LoadExistingAsync(dto.Id, version));
         }
     }
 
-    // Loads the most recent persisted diagnostic for this transaction (if any) so
-    // reopening the drawer shows the previous result instead of asking to analyze again.
-    private async Task LoadExistingDiagnosticAsync(int transactionId)
+    // Trae el último diagnóstico guardado (si hay) para no pedir analizar de nuevo. Si no hay y se pidió
+    // «abrir y analizar», arranca el análisis.
+    private async Task LoadExistingAsync(int transactionId, int version)
     {
+        Diagnostic? existing = null;
         try
         {
-            var existing = await Db.Diagnostics
-                .Where(d => d.TransactionId == transactionId)
-                .OrderByDescending(d => d.CreatedAt)
-                .FirstOrDefaultAsync();
-
-            // Ignore the result if the drawer moved on to a different transaction while we awaited.
-            if (existing != null && _dto?.Id == transactionId)
-            {
-                _diagnostic = existing.Markdown;
-                await InvokeAsync(StateHasChanged);
-            }
+            existing = await LoadLatestDiagnosticAsync(transactionId);
         }
         catch (Exception ex)
         {
-            Logger?.LogError(ex, "Failed to load existing diagnostic for transaction {Id}", transactionId);
+            Logger.LogError(ex, "Failed to load existing diagnostic for transaction {Id}", transactionId);
+        }
+
+        if (version != _version) return;
+
+        var autoAnalyze = DrawerService.TryConsumeAutoAnalyze(transactionId);
+
+        if (existing != null)
+        {
+            await ShowDiagnosticAsync(existing, version);
+            return;
+        }
+
+        _state = DiagState.Empty;
+        StateHasChanged();
+
+        if (autoAnalyze)
+        {
+            await AnalyzeAsync();
         }
     }
 
-    private void Close()
+    private Task<Diagnostic?> LoadLatestDiagnosticAsync(int transactionId) =>
+        DbGate.RunAsync(() => Db.Diagnostics.AsNoTracking()
+            .Where(d => d.TransactionId == transactionId)
+            .OrderByDescending(d => d.CreatedAt)
+            .FirstOrDefaultAsync());
+
+    private async Task ShowDiagnosticAsync(Diagnostic diagnostic, int version)
     {
-        DrawerService.Close();
+        _diagnostic = diagnostic;
+        _sections = DiagnosticSectionParser.Parse(diagnostic.Markdown);
+        _state = DiagState.Ready;
+        StateHasChanged();
+
+        if (diagnostic.Id == Guid.Empty || string.IsNullOrWhiteSpace(_userId)) return;
+
+        try
+        {
+            var vote = await FeedbackService.GetUserVoteAsync(diagnostic.Id, _userId);
+            if (version != _version) return;
+            _userVote = vote;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load the user's vote for diagnostic {Id}", diagnostic.Id);
+        }
     }
+
+    private async Task AnalyzeAsync()
+    {
+        // Evita doble click / llamadas duplicadas mientras hay un análisis en curso.
+        if (_dto == null || _state == DiagState.Analyzing) return;
+
+        var version = _version;
+        var transactionId = _dto.Id;
+        _state = DiagState.Analyzing;
+        _errorMessage = null;
+        _diagnostic = null;
+        _sections = null;
+        StateHasChanged();
+
+        var minVisible = Task.Delay(MinAnalyzingVisibleDuration);
+        Diagnostic? result = null;
+        string? error = null;
+
+        try
+        {
+            var tx = await DbGate.RunAsync(() => Db.Transactions.AsNoTracking().FirstOrDefaultAsync(t => t.Id == transactionId));
+            if (tx == null)
+            {
+                error = "No se encontró la transacción.";
+            }
+            else
+            {
+                // Corre el diagnóstico y lo guarda como Diagnostic (DiagnosticOrchestratorService).
+                var markdown = await Orchestrator.RunDiagnosticAsync(tx, _userId);
+                var saved = await LoadLatestDiagnosticAsync(transactionId);
+
+                // Si el orquestador devolvió su respuesta de contingencia no hay fila nueva: se muestra sin voto.
+                result = saved != null && saved.Markdown == markdown
+                    ? saved
+                    : new Diagnostic { Id = Guid.Empty, TransactionId = transactionId, Markdown = markdown ?? string.Empty, CreatedAt = DateTime.UtcNow };
+            }
+        }
+        catch (AiEngineException aiEx)
+        {
+            // Error del proveedor para el operador (API key, rate limit, modelo inválido, timeout…).
+            Logger.LogWarning(aiEx, "AI provider error analyzing transaction {Id}", transactionId);
+            error = aiEx.Message;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Analyze failed for transaction {Id}", transactionId);
+            error = GenericError;
+        }
+        finally
+        {
+            try { await minVisible; } catch { /* Task.Delay no falla */ }
+        }
+
+        // Siempre se sale de «Analizando» (éxito, error o timeout), salvo que el Drawer ya muestre otra transacción.
+        if (version != _version) return;
+
+        if (result != null)
+        {
+            await ShowDiagnosticAsync(result, version);
+            if (result.Id != Guid.Empty) DrawerService.NotifyDiagnosticsChanged();
+        }
+        else
+        {
+            _errorMessage = string.IsNullOrWhiteSpace(error) ? GenericError : error;
+            _state = DiagState.Error;
+            StateHasChanged();
+        }
+    }
+
+    private async Task VoteAsync(bool isUseful)
+    {
+        if (_diagnostic is null || _diagnostic.Id == Guid.Empty || _savingVote) return;
+
+        if (string.IsNullOrWhiteSpace(_userId))
+        {
+            _voteError = true;
+            return;
+        }
+
+        var version = _version;
+        _savingVote = true;
+        _voteError = false;
+
+        try
+        {
+            var feedback = await FeedbackService.VoteAsync(_diagnostic.Id, _userId, isUseful);
+            if (version != _version) return;
+            _userVote = feedback.IsUseful;
+            DrawerService.NotifyDiagnosticsChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to save vote for diagnostic {Id}", _diagnostic.Id);
+            if (version == _version) _voteError = true;
+        }
+        finally
+        {
+            if (version == _version) _savingVote = false;
+        }
+    }
+
+    private void Close() => DrawerService.Close();
 
     private void HandleKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Escape") Close();
     }
 
-    private async Task Analyze()
-    {
-        // Guard against double-click / duplicate calls while a request is already in flight.
-        if (_dto == null || _isAnalyzing) return;
-
-        var transactionId = _dto.Id;
-        _isAnalyzing = true;
-        _loaderClosing = false;
-        _analyzeError = null;
-        _diagnostic = null;
-        StateHasChanged();
-
-        // Minimum time the loader stays visible even if the AI call resolves almost
-        // instantly (e.g. a very fast provider), so it never "flashes" imperceptibly.
-        // Awaited in the finally block so it applies on success, business error and
-        // exception paths alike, without adding latency to a slow real provider call.
-        var minLoaderVisibleTask = Task.Delay(MinLoaderVisibleDuration);
-
-        try
-        {
-            var tx = await Db.Transactions.FindAsync(transactionId);
-            if (tx == null)
-            {
-                _analyzeError = "No se encontró la transacción.";
-                return;
-            }
-
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            var userId = user?.Identity != null && user.Identity.IsAuthenticated
-                ? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                : null;
-
-            // Runs the AI diagnostic and persists it as a Diagnostic row linked to the
-            // transaction (see DiagnosticOrchestratorService.PersistDiagnosticAsync).
-            var markdown = await Orchestrator.RunDiagnosticAsync(tx, userId);
-            if (_dto?.Id == transactionId)
-            {
-                _diagnostic = markdown;
-            }
-        }
-        catch (AiEngineException aiEx)
-        {
-            // Operator-facing provider error (invalid API key, rate limit, timeout, ...).
-            Logger?.LogWarning(aiEx, "AI provider error analyzing transaction {Id}", transactionId);
-            _analyzeError = $"⚠️ {aiEx.Message}";
-        }
-        catch (Exception ex)
-        {
-            Logger?.LogError(ex, "Analyze failed for transaction {Id}", transactionId);
-            _analyzeError = "⚠️ No logramos procesar el diagnóstico inteligente en este momento. Por favor, reintentá en unos instantes.";
-        }
-        finally
-        {
-            // Always waits out the minimum visible duration, then plays the fade-out
-            // animation (via the "closing" CSS class) before actually hiding the loader
-            // and clearing the disabled state — whether Analyze succeeded, failed, or hit
-            // the early "transaction not found" return above — never left stuck showing
-            // the loader, and never swapped out abruptly.
-            await minLoaderVisibleTask;
-            _loaderClosing = true;
-            await InvokeAsync(StateHasChanged);
-            await Task.Delay(LoaderFadeOutDuration);
-            _isAnalyzing = false;
-            _loaderClosing = false;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    // Minimal, safe Markdown->HTML conversion: HTML-encodes the input first (so raw
-    // user/API content can never inject markup), then converts a small supported subset
-    // (bold **text**, "## " headings, "- " list items) into real HTML tags.
-    private static string RenderMarkdown(string md)
-    {
-        if (string.IsNullOrWhiteSpace(md)) return string.Empty;
-        var encoded = System.Net.WebUtility.HtmlEncode(md);
-        encoded = Regex.Replace(encoded, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
-
-        var lines = encoded.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        var sb = new System.Text.StringBuilder();
-        bool inList = false;
-
-        foreach (var raw in lines)
-        {
-            var line = raw.Trim();
-            if (line.StartsWith("## "))
-            {
-                if (inList) { sb.AppendLine("</ul>"); inList = false; }
-                sb.AppendLine($"<h5>{line.Substring(3).Trim()}</h5>");
-                continue;
-            }
-            if (line.StartsWith("- "))
-            {
-                if (!inList) { sb.AppendLine("<ul>"); inList = true; }
-                sb.AppendLine($"<li>{line.Substring(2).Trim()}</li>");
-                continue;
-            }
-            if (inList) { sb.AppendLine("</ul>"); inList = false; }
-            sb.AppendLine($"<p>{line}</p>");
-        }
-        if (inList) sb.AppendLine("</ul>");
-        return sb.ToString();
-    }
+    private static DateTime ToLocal(DateTime value) =>
+        value.Kind == DateTimeKind.Local ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc).ToLocalTime();
 
     public void Dispose()
     {
-        Logger?.LogInformation("TransactionDetailDrawer disposing and unregistering callback");
-        DrawerService.Unregister(OnDrawerChange);
+        if (_registered) DrawerService.Unregister(OnDrawerChange);
     }
 }
