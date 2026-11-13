@@ -49,6 +49,27 @@ public sealed class DiagnosticSectionParserTests
     }
 
     [Fact]
+    public void LlmFormat_WrappedInMarkdownFence_IsUnwrapped()
+    {
+        // Respuesta real de gpt-oss-20b (Groq): todo el diagnóstico dentro de ```markdown … ```.
+        var md = "```markdown\n# Diagnóstico de la Transacción Fallida\n\n" +
+                 "## Razón del fallo  \n- **Error**: *Suspected fraud*.\n\n" +
+                 "## Acción recomendada para el operador  \n1. **Revisar la cuenta**  \n   - Verificar la IP.\n\n" +
+                 "## Mensaje sugerido para el cliente  \nHola, estamos revisando tu pago.\n```";
+
+        var s = DiagnosticSectionParser.Parse(md);
+
+        Assert.True(s.HasSections);
+        Assert.DoesNotContain("```", s.WhatHappened);
+        Assert.DoesNotContain("<pre>", DiagnosticMarkdown.ToHtml(s.WhatHappened));
+        Assert.Contains("<strong>Error</strong>", DiagnosticMarkdown.ToHtml(s.WhatHappened));
+        Assert.Equal("Hola, estamos revisando tu pago.", s.CustomerMessage);
+
+        Assert.True(SuggestedMessageExtractor.TryExtractPlainText(md, out var copy));
+        Assert.Equal("Hola, estamos revisando tu pago.", copy);
+    }
+
+    [Fact]
     public void UnknownHeading_IsKeptApart_AndDoesNotLeakIntoCustomerMessage()
     {
         var md = "## Mensaje sugerido para el cliente\nHola.\n\n## Notas internas\nNo enviar al cliente.";

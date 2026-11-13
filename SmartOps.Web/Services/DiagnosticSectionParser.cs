@@ -46,8 +46,11 @@ public static class DiagnosticSectionParser
             [Kind.CustomerMessage] = new(), [Kind.Other] = new()
         };
 
+        // Sin el bloque ```markdown que algunos LLM ponen alrededor de todo el diagnóstico.
+        full = SuggestedMessageExtractor.UnwrapOuterFence(full);
+
         var current = Kind.None;
-        var lines = full.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+        var lines = full.Split('\n');
 
         foreach (var line in lines)
         {

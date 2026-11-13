@@ -125,7 +125,7 @@
                             else
                             {
                                 @* Sin secciones reconocibles: el Markdown completo, renderizado (nunca crudo). *@
-                                <div class="drawer-md">@((MarkupString)DiagnosticMarkdown.ToHtml(_diagnostic.Markdown))</div>
+                                <div class="drawer-md">@((MarkupString)DiagnosticMarkdown.ToHtml(_sections?.FullMarkdown ?? _diagnostic.Markdown))</div>
                             }
 
                             @if (_diagnostic.Id != Guid.Empty)

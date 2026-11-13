@@ -34,7 +34,7 @@ namespace SmartOps.Web.Services
                 return false;
             }
 
-            var lines = markdown.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+            var lines = UnwrapOuterFence(markdown).Split('\n');
 
             var start = Array.FindIndex(lines, IsCustomerMessageHeading);
             if (start < 0)
@@ -86,6 +86,33 @@ namespace SmartOps.Web.Services
             var normalized = Normalize(match.Groups["text"].Value);
             return normalized.Contains("razon") || normalized.Contains("accion") || normalized.Contains("resumen")
                    || normalized.Contains("causa") || normalized.Contains("recomendacion");
+        }
+
+        private static readonly Regex OuterFenceOpen = new(@"^\s*(```|~~~)\s*(markdown|md)?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        /// <summary>
+        /// Algunos LLM devuelven el diagnóstico entero dentro de un bloque <c>```markdown … ```</c>. Si el texto
+        /// empieza con ese fence, lo quita (y también el cierre, si está al final). Devuelve saltos de línea \n.
+        /// </summary>
+        internal static string UnwrapOuterFence(string markdown)
+        {
+            var normalized = markdown.Replace("\r\n", "\n").Replace('\r', '\n');
+            var trimmed = normalized.Trim('\n', ' ', '\t');
+            var firstBreak = trimmed.IndexOf('\n');
+            if (firstBreak < 0) return normalized;
+
+            var open = OuterFenceOpen.Match(trimmed[..firstBreak]);
+            if (!open.Success) return normalized;
+
+            var body = trimmed[(firstBreak + 1)..];
+            var lastBreak = body.LastIndexOf('\n');
+            var lastLine = (lastBreak < 0 ? body : body[(lastBreak + 1)..]).Trim();
+            if (lastLine == open.Groups[1].Value)
+            {
+                body = lastBreak < 0 ? string.Empty : body[..lastBreak];
+            }
+
+            return body;
         }
 
         internal static bool IsAtxHeading(string line) => AtxHeading.IsMatch(line);
