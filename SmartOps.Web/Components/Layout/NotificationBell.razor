@@ -9,61 +9,86 @@
 @using SmartOps.Web.Services
 @implements IAsyncDisposable
 
-<div class="dropdown">
-    <!-- Bell button with elevated z-index to avoid overlays intercepting clicks -->
-    <button id="notification-bell-btn" type="button" class="btn btn-sm position-relative" style="z-index:99999;position:relative;" @onclick="Toggle">
-        <i class="bi bi-bell" style="font-size:18px;color:#cbd5e1"></i>
-        @if (UnreadCount > 0)
+@* Campana y desplegable de notificaciones (docs/redesign/07-notificaciones.html). *@
+<div class="notif">
+    @if (open)
+    {
+        <!-- Backdrop transparente: el click afuera cierra el desplegable, como el del Drawer. -->
+        <div class="notif-backdrop" @onclick="CloseAndFocusBell"></div>
+    }
+
+    <button id="notification-bell-btn" type="button" class="notif-bell @(open ? "is-open" : null)" @ref="bellRef"
+            aria-label="@NotificationFormat.AriaLabel(UnreadCount)" aria-expanded="@(open ? "true" : "false")"
+            aria-controls="notification-panel" aria-haspopup="true" @onclick="Toggle">
+        <i class="bi bi-bell" aria-hidden="true"></i>
+        @if (NotificationFormat.Badge(UnreadCount) is { } badge)
         {
-            <span class="badge bg-danger position-absolute notif-bell-badge" style="top:-6px;right:-6px;pointer-events:none;">@UnreadCount</span>
+            <span class="notif-badge" aria-hidden="true">@badge</span>
         }
     </button>
 
     @if (open)
     {
-        <!-- Transparent full-viewport backdrop: closes the dropdown on outside click,
-             same behavior as the TransactionDetailDrawer's backdrop. -->
-        <div class="notif-backdrop" @onclick="Close"></div>
-        <div class="notif-panel" style="position:absolute;right:0;top:36px;width:320px;z-index:99998;" tabindex="0" @ref="panelRef" @onkeydown="HandleKeyDown" @onclick:stopPropagation>
-            <div class="notif-header d-flex justify-content-between align-items-center">
-                <span class="notif-title">Notificaciones</span>
-                <button class="notif-mark-all" @onclick:stopPropagation @onclick="MarkAllRead">Marcar todas como leídas</button>
+        <section id="notification-panel" class="notif-panel" aria-label="Notificaciones" tabindex="-1"
+                 @ref="panelRef" @onkeydown="HandleKeyDown">
+            <div class="notif-head">
+                <div class="notif-head-text">
+                    <h2 class="notif-title">Notificaciones</h2>
+                    <span class="notif-count">@UnreadCount sin leer</span>
+                </div>
+                <button type="button" class="notif-mark-all" disabled="@(UnreadCount == 0)" @onclick="MarkAllRead">Marcar todas como leídas</button>
             </div>
-            <div class="notif-list">
-                @if (notifications.Count == 0)
-                {
-                    <div class="notif-empty">No hay notificaciones.</div>
-                }
-                @foreach(var n in notifications)
-                {
-                    <div class="d-flex align-items-start gap-2 notif-item">
-                        <div class="notif-icon">
-                            <i class="bi bi-exclamation-circle"></i>
-                        </div>
-                        <div class="flex-grow-1">
-                            <div class="d-flex justify-content-between">
-                                <div>
-                                    <div class="notif-item-title">@n.Title</div>
-                                    <div class="notif-item-meta">Tarjeta •••• @GetLast4(n.TransactionId) — @n.Message</div>
+
+            @if (notifications.Count == 0)
+            {
+                <p class="notif-empty">No hay notificaciones.</p>
+            }
+            else
+            {
+                <ul class="notif-list">
+                    @foreach (var n in notifications)
+                    {
+                        <li class="notif-item @(n.IsRead ? "is-read" : "is-unread")" data-id="@n.Id">
+                            @if (n.IsRead)
+                            {
+                                <span class="notif-dot notif-dot-read" aria-hidden="true"></span>
+                            }
+                            else
+                            {
+                                <span class="notif-dot dot-danger" aria-hidden="true"></span>
+                                <span class="visually-hidden">Sin leer.</span>
+                            }
+                            <div class="notif-body">
+                                <div class="notif-row">
+                                    <span class="notif-item-title">
+                                        @if (n.TransactionId.HasValue)
+                                        {
+                                            <span>Falló la <span class="mono">TX @n.TransactionId</span></span>
+                                        }
+                                        else
+                                        {
+                                            <span>@n.Title</span>
+                                        }
+                                    </span>
+                                    <span class="notif-ago">@NotificationFormat.RelativeTime(n.CreatedAt, DateTime.UtcNow)</span>
                                 </div>
-                                <div class="notif-item-ago">@GetAgo(n.CreatedAt)</div>
+                                <span class="notif-meta">@HistoryFormat.Reason(n.Message) · <span class="mono">@HistoryFormat.Card(GetLast4(n.TransactionId))</span></span>
+                                <div class="notif-actions">
+                                    @if (n.TransactionId.HasValue)
+                                    {
+                                        <button type="button" class="notif-analyze" @onclick="() => Analyze(n.TransactionId, n.Id)">Analizar</button>
+                                    }
+                                    @if (!n.IsRead)
+                                    {
+                                        <button type="button" class="notif-mark-read" @onclick="() => MarkAsRead(n.Id)">Marcar leída</button>
+                                    }
+                                </div>
                             </div>
-                            <div class="mt-1 d-flex align-items-center gap-2">
-                                <button class="notif-btn-analyze" @onclick:stopPropagation @onclick="() => Analyze(n.TransactionId, n.Id)">Analizar con IA</button>
-                                @if (n.IsRead)
-                                {
-                                    <span class="notif-read-label">Leída</span>
-                                }
-                                else
-                                {
-                                    <button class="notif-link-read" @onclick:stopPropagation @onclick="() => MarkAsRead(n.Id)">Marcar leída</button>
-                                }
-                            </div>
-                        </div>
-                    </div>
-                }
-            </div>
-        </div>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
     }
 </div>
 
@@ -74,6 +99,8 @@
     private bool open = false;
     private bool _shouldFocusPanel;
     private ElementReference panelRef;
+    private ElementReference bellRef;
+    private bool _shouldFocusBell;
     private HubConnection? hubConnection;
     private readonly SemaphoreSlim _refreshLock = new(1,1);
 
@@ -120,6 +147,12 @@
 
         // Focus the panel right after it opens so keydown (Escape) events are captured,
         // mirroring how TransactionDetailDrawer focuses itself on open.
+        if (_shouldFocusBell)
+        {
+            _shouldFocusBell = false;
+            try { await bellRef.FocusAsync(); } catch (Exception ex) { Logger.LogDebug(ex, "FocusAsync failed for notification bell"); }
+        }
+
         if (_shouldFocusPanel)
         {
             _shouldFocusPanel = false;
@@ -168,18 +201,23 @@
 
     private async Task Toggle()
     {
-        Logger.LogInformation("NotificationBell.Toggle invoked. open={Open}", open);
-        open = !open;
         if (open)
         {
-            await SafeRefreshAsync();
-            _shouldFocusPanel = true;
+            CloseAndFocusBell();
+            return;
         }
+
+        open = true;
+        await SafeRefreshAsync();
+        _shouldFocusPanel = true;
     }
 
-    private void Close()
+    // Escape o click afuera: se cierra y el foco vuelve a la campana.
+    private void CloseAndFocusBell()
     {
+        if (!open) return;
         open = false;
+        _shouldFocusBell = true;
     }
 
     private bool _drawerRegistered;
@@ -193,7 +231,7 @@
 
     private void HandleKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Escape") Close();
+        if (e.Key == "Escape") CloseAndFocusBell();
     }
 
 
@@ -201,15 +239,6 @@
     {
         if (!txId.HasValue) return "----";
         return cardLast4Cache.TryGetValue(txId.Value, out var v) ? v : "----";
-    }
-
-    private string GetAgo(DateTime dt)
-    {
-                var span = DateTime.UtcNow - dt;
-                if (span.TotalMinutes < 1) return "Ahora";
-                if (span.TotalMinutes < 60) return $"Hace {(int)span.TotalMinutes} min";
-                if (span.TotalHours < 24) return $"Hace {(int)span.TotalHours} h";
-                return $"Hace {(int)span.TotalDays} d";
     }
 
     private async Task MarkAllRead()

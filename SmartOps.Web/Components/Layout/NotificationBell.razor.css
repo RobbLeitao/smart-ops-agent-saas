@@ -1,143 +1,239 @@
-/* Dropdown panel: matches the dark/cyberpunk palette used by the drawers and
-   dashboard panels (bg #1e2330, subtle slate border + cyan glow). */
-/* Transparent full-viewport backdrop used to detect outside clicks and close the
-   dropdown, same pattern as TransactionDetailDrawer's backdrop. */
+/* Campana y desplegable de notificaciones (docs/redesign/07-notificaciones.html). Solo tokens. */
+
+.notif {
+    position: relative;
+}
+
+/* Backdrop transparente para cerrar con un click afuera, como el del Drawer. */
 .notif-backdrop {
     position: fixed;
     inset: 0;
     background: transparent;
-    z-index: 99997;
+    z-index: 1;
+}
+
+.notif-bell {
+    position: relative;
+    z-index: 2;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 18px;
+    cursor: pointer;
+}
+
+.notif-bell:hover,
+.notif-bell.is-open {
+    background: var(--surface-raised);
+}
+
+.notif-badge {
+    position: absolute;
+    top: 2px;
+    right: -6px;
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: var(--radius-pill);
+    background: var(--danger);
+    color: var(--on-primary);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    pointer-events: none;
 }
 
 .notif-panel {
-    background: linear-gradient(180deg, #1e2330 0%, #171c26 100%);
-    border: 1px solid rgba(148, 163, 184, 0.16);
-    border-radius: 0.9rem;
-    box-shadow: 0 20px 60px rgba(2, 6, 23, 0.55), 0 0 24px rgba(34, 211, 238, 0.08);
-    color: #e6eef8;
+    position: absolute;
+    top: calc(100% + var(--space-2));
+    right: 0;
+    z-index: 3;
+    width: min(400px, calc(100vw - 2 * var(--space-4)));
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
 }
 
-.notif-panel:focus,
-.notif-panel:focus-visible {
+.notif-panel:focus {
     outline: none;
 }
 
-.notif-header {
-    padding: 12px 14px;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+.notif-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: 14px var(--space-4) 14px var(--space-5);
+    border-bottom: 1px solid var(--border);
+}
+
+.notif-head-text {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    min-width: 0;
 }
 
 .notif-title {
-    color: #f8fafc;
-    font-weight: 700;
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.notif-count {
+    font-size: 13px;
+    color: var(--text-muted);
+    white-space: nowrap;
 }
 
 .notif-mark-all {
-    background: transparent;
+    min-height: 40px;
+    padding: 0 var(--space-2);
     border: none;
-    color: #94a3b8;
-    font-size: 0.8rem;
-    padding: 2px 4px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
 }
 
-.notif-mark-all:hover {
-    color: #22d3ee;
-    text-decoration: underline;
+.notif-mark-all:disabled {
+    color: var(--text-muted);
+    cursor: not-allowed;
 }
 
 .notif-list {
-    max-height: 320px;
-    overflow: auto;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 520px;
+    overflow-y: auto;
 }
 
 .notif-item {
-    border-bottom: 1px solid rgba(148, 163, 184, 0.08);
-    padding: 10px 14px;
-    transition: background-color 0.15s ease;
+    display: flex;
+    gap: var(--space-3);
+    padding: 14px var(--space-4) 14px var(--space-5);
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 .notif-item:last-child {
     border-bottom: none;
 }
 
-.notif-item:hover {
-    background: rgba(34, 211, 238, 0.05);
+.notif-item.is-unread {
+    background: var(--surface-raised);
 }
 
-.notif-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    background: rgba(239, 68, 68, 0.12);
+.notif-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    margin-top: 7px;
+    border-radius: 50%;
+}
+
+.notif-dot.dot-danger {
+    background: var(--danger);
+}
+
+.notif-dot-read {
+    box-sizing: border-box;
+    border: 1.5px solid var(--border-strong);
+}
+
+.notif-body {
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
+    flex-direction: column;
+    gap: var(--space-1);
 }
 
-.notif-icon .bi {
-    color: #ef4444;
+.notif-row {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
 }
 
 .notif-item-title {
-    color: #e6eef8;
-    font-size: 0.85rem;
-}
-
-.notif-item-meta {
-    color: #94a3b8;
-    font-size: 0.78rem;
-}
-
-.notif-item-ago {
-    color: #64748b;
-    font-size: 0.75rem;
-    white-space: nowrap;
-}
-
-.notif-btn-analyze {
-    background: #635bff;
-    color: #ffffff;
-    border: none;
-    border-radius: 8px;
-    padding: 4px 10px;
-    font-size: 0.78rem;
     font-weight: 600;
 }
 
-.notif-btn-analyze:hover {
-    background: #4a43d1;
+.notif-item.is-read .notif-item-title {
+    font-weight: 500;
+    color: var(--text-muted);
 }
 
-.notif-link-read {
+.notif-ago {
+    flex: none;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.notif-meta {
+    font-size: 13px;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.mono {
+    font-family: var(--font-mono);
+}
+
+.notif-actions {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: 6px;
+}
+
+.notif-analyze,
+.notif-mark-read {
+    min-height: var(--control-sm);
+    border-radius: 8px;
     background: transparent;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.notif-analyze {
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    font-weight: 600;
+}
+
+.notif-analyze:hover {
+    background: var(--surface-selected);
+}
+
+.notif-mark-read {
+    padding: 0 10px;
     border: none;
-    color: #94a3b8;
-    font-size: 0.78rem;
-    padding: 4px 6px;
+    color: var(--text-muted);
 }
 
-.notif-link-read:hover {
-    color: #22d3ee;
-    text-decoration: underline;
-}
-
-/* Non-interactive counterpart of .notif-link-read shown once a notification is
-   already marked as read: same font/size, no button semantics or hover state. */
-.notif-read-label {
-    color: #64748b;
-    font-size: 0.78rem;
-    padding: 4px 6px;
+.notif-mark-read:hover {
+    color: var(--text);
 }
 
 .notif-empty {
-    color: #94a3b8;
-    font-size: 0.85rem;
-    padding: 18px 14px;
+    margin: 0;
+    padding: 18px var(--space-5);
+    color: var(--text-muted);
     text-align: center;
-}
-
-.notif-bell-badge {
-    box-shadow: 0 0 6px rgba(239, 68, 68, 0.65);
 }
