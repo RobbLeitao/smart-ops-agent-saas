@@ -177,6 +177,7 @@ builder.Services.AddScoped<SmartOps.Web.Services.DbContextGate>();
 builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticFeedbackService>();
 builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticReportService>();
 builder.Services.AddScoped<SmartOps.Web.Services.IntegrationSettingsStore>();
+builder.Services.AddSingleton<SmartOps.Web.Services.IAiConnectionTester, SmartOps.Web.Services.AiConnectionTester>();
 // Ensure HubContext is available via SignalR server support; SignalR is included in ASP.NET Core
 builder.Services.AddSignalR();
 

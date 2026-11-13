@@ -169,6 +169,25 @@ namespace SmartOps.Web.Tests
         }
 
         [Fact]
+        public async Task AIOpsService_ModelNotFound404_MapsToModelMessage_ShownInDrawer()
+        {
+            var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                Content = new StringContent(
+                    "{\"error\":{\"message\":\"The model `nope` does not exist\",\"type\":\"invalid_request_error\",\"code\":\"model_not_found\"}}",
+                    Encoding.UTF8, "application/json")
+            });
+            using var db = CreateDbWithSettings("OpenAI", ApiKey, "nope", GroqEndpoint);
+            var service = new AIOpsService(Kernel.CreateBuilder().Build(), db,
+                new SemanticKernelChatCompletionServiceFactory(new HttpClient(handler)));
+
+            var ex = await Assert.ThrowsAsync<AiEngineException>(() => service.ExecutePromptAsync(Prompt));
+
+            Assert.Equal("El modelo «nope» no existe o esta key no tiene acceso. Verificá el ID del modelo.", ex.Message);
+            Assert.DoesNotContain(ApiKey, ex.ToString());
+        }
+
+        [Fact]
         public async Task AIOpsService_CustomEndpoint_NetworkTimeout_MapsToTimeoutAiEngineException()
         {
             var handler = new FakeHandler(_ => throw new TaskCanceledException("The request timed out."));

@@ -105,7 +105,7 @@ namespace SmartOps.Web.Services
                     ex);
             }
 
-            var content = await InvokeAndMapErrorsAsync(providerKernel, userPrompt, settings);
+            var content = await InvokeAndMapErrorsAsync(providerKernel, userPrompt, settings, integration.ModelId, integration.ApiKey);
             if (string.IsNullOrWhiteSpace(content))
             {
                 throw new AiEngineException("El proveedor de IA no devolvió contenido en la respuesta.");
@@ -135,7 +135,7 @@ namespace SmartOps.Web.Services
             }
         }
 
-        private static async Task<string> InvokeAndMapErrorsAsync(Kernel kernel, string userPrompt, PromptExecutionSettings settings)
+        private static async Task<string> InvokeAndMapErrorsAsync(Kernel kernel, string userPrompt, PromptExecutionSettings settings, string modelId, string apiKey)
         {
             try
             {
@@ -144,7 +144,7 @@ namespace SmartOps.Web.Services
             }
             catch (Exception ex)
             {
-                throw MapToAiEngineException(ex);
+                throw MapToAiEngineException(ex, modelId, apiKey);
             }
         }
 
@@ -153,34 +153,8 @@ namespace SmartOps.Web.Services
                && ex.Message != null
                && ex.Message.Contains("No service was found", StringComparison.OrdinalIgnoreCase);
 
-        private static AiEngineException MapToAiEngineException(Exception ex)
-        {
-            return ex switch
-            {
-                AiEngineException aiEx => aiEx,
-                HttpOperationException httpEx => new AiEngineException(MapHttpErrorMessage(httpEx), httpEx),
-                OperationCanceledException => new AiEngineException(
-                    "La solicitud al proveedor de IA superó el tiempo de espera (timeout). Intentá nuevamente en unos minutos.",
-                    ex),
-                _ => new AiEngineException(
-                    $"Ocurrió un error inesperado al invocar al proveedor de IA: {ex.Message}",
-                    ex)
-            };
-        }
-
-        private static string MapHttpErrorMessage(HttpOperationException httpEx)
-        {
-            return httpEx.StatusCode switch
-            {
-                HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden =>
-                    "La API Key configurada en /integrations no es válida o no tiene permisos para este modelo. Verificá las credenciales.",
-                HttpStatusCode.TooManyRequests =>
-                    "Se alcanzó el límite de solicitudes (rate limit) del proveedor de IA. Esperá unos minutos e intentá nuevamente.",
-                HttpStatusCode.RequestTimeout or HttpStatusCode.GatewayTimeout =>
-                    "La solicitud al proveedor de IA superó el tiempo de espera (timeout). Intentá nuevamente en unos minutos.",
-                _ => $"El proveedor de IA devolvió un error ({(httpEx.StatusCode.HasValue ? ((int)httpEx.StatusCode.Value).ToString() : httpEx.Message)}). Verificá la configuración en /integrations."
-            };
-        }
+        private static AiEngineException MapToAiEngineException(Exception ex, string? modelId = null, string? apiKey = null)
+            => AiEngineErrorMapper.Map(ex, modelId, apiKey);
 
         private static bool IsRealProvider(string? provider)
             => !string.IsNullOrWhiteSpace(provider)
