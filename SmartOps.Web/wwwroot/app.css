@@ -1,9 +1,87 @@
+/* ==========================================================================
+   SmartOps design tokens (docs/redesign/tokens.json). Solo tema oscuro.
+   ========================================================================== */
+:root {
+    /* Color */
+    --bg: #0b0d10;
+    --surface: #111418;
+    --surface-sunken: #0e1114;
+    --surface-raised: #1c2026;
+    --border: #22262d;
+    --border-subtle: #1c2026;
+    --border-strong: #2c313a;
+    --text: #e8eaed;
+    --text-muted: #8b929c;
+    --primary: #e8eaed;
+    --on-primary: #0b0d10;
+    --danger: #f0616d;
+    --success: #3fb68b;
+    --ai: #9b8cff;
+    --ai-text: #c9c2ff;
+    --ai-surface: #1a1830;
+    --ai-border: #34305a;
+    --brand-cyan: #33e8ea;
+    --brand-lime: #c4f46c;
+
+    /* Tipografía */
+    --font-display: "Space Grotesk", Inter, system-ui, sans-serif;
+    --font-sans: Inter, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+    /* Espaciado */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
+
+    /* Radios */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-pill: 999px;
+
+    /* Tamaños */
+    --control: 44px;
+    --control-sm: 36px;
+    --header: 56px;
+    --content-max: 1376px;
+}
+
+/* Tokens del informe PDF: solo existen al imprimir. */
+@media print {
+    :root {
+        --print-paper: #ffffff;
+        --print-band: #0b0d10;
+        --print-ink: #111418;
+        --print-muted: #5b6270;
+        --print-rule: #d5d8dd;
+        --print-box: #f4f5f7;
+    }
+}
+
+html {
+    color-scheme: dark;
+}
+
 html, body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    /* CloudUI Slate Dark base */
-    background-color: #1a1f2c; /* bg-[#1a1f2c] */
-    color: #e6eef8; /* light slate */
     min-height: 100vh;
+}
+
+body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 2px;
 }
 
 
