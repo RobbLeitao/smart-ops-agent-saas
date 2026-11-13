@@ -963,3 +963,126 @@ h1:focus {
     0%, 100% { transform: scale(1); filter: drop-shadow(0 0 18px rgba(34, 211, 238, 0.55)); }
     50% { transform: scale(1.08); filter: drop-shadow(0 0 28px rgba(139, 92, 246, 0.65)); }
 }
+
+/* ==========================================================================
+   Componentes compartidos del rediseño (DESIGN-SYSTEM.md · Componentes)
+   ========================================================================== */
+
+/* Punto de estado: color = estado. */
+.dot {
+    display: inline-block;
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.dot-sm { width: 6px; height: 6px; }
+.dot-danger { background: var(--danger); }
+.dot-success { background: var(--success); }
+.dot-ai { background: var(--ai); }
+
+/* StatusChip: Pendiente (contorno) y Listo (IA). */
+.status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border-strong);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 16px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.status-chip-ready {
+    border-color: var(--ai-border);
+    background: var(--ai-surface);
+    color: var(--ai-text);
+}
+
+/* Button: primario, secundario y link. Alto mínimo = control (44px). */
+.btn-ds {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: var(--control);
+    padding: 0 18px;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-ds:disabled {
+    cursor: not-allowed;
+}
+
+.btn-ds-primary {
+    background: var(--primary);
+    color: var(--on-primary);
+}
+
+.btn-ds-primary:hover:not(:disabled) {
+    background: var(--text);
+    filter: brightness(0.92);
+}
+
+.btn-ds-primary:disabled {
+    background: var(--surface-raised);
+    color: var(--text-muted);
+}
+
+.btn-ds-secondary {
+    padding: 0 16px;
+    border-color: var(--border-strong);
+}
+
+.btn-ds-secondary:hover:not(:disabled) {
+    background: var(--surface-raised);
+    color: var(--text);
+}
+
+.btn-ds-secondary:disabled {
+    color: var(--text-muted);
+}
+
+.btn-ds-link {
+    padding: 0 16px;
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.btn-ds-link:hover {
+    color: var(--text);
+    background: var(--surface-raised);
+}
+
+/* Spinner (anillo + arco). El color del arco y de la pista se ajusta con las custom properties. */
+.spinner-ring {
+    flex: none;
+    --spinner-track: var(--border);
+    --spinner-arc: var(--text);
+    animation: spinner-rotate 0.9s linear infinite;
+}
+
+.spinner-ring circle { stroke: var(--spinner-track); }
+.spinner-ring path { stroke: var(--spinner-arc); }
+
+@keyframes spinner-rotate {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner-ring { animation-duration: 2.4s; }
+}

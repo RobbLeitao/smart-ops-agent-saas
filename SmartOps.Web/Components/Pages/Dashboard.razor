@@ -2,376 +2,581 @@
 @rendermode InteractiveServer
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @implements IAsyncDisposable
+@using System.Diagnostics
+@using System.Globalization
 @using SmartOps.Core.Entities
+@using SmartOps.Web.Services
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Components.Authorization
-@using Microsoft.JSInterop
 @using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.Extensions.Options
 @inject Microsoft.Extensions.Logging.ILogger<Dashboard> Logger
 @inject SmartOps.Infrastructure.Data.AppDbContext Db
-@inject SmartOps.Web.Services.DiagnosticOrchestratorService Orchestrator
+@inject DbContextGate DbGate
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IJSRuntime JS
 @inject NavigationManager NavigationManager
-@inject SmartOps.Web.Services.TransactionDrawerService DrawerService
-@inject SmartOps.Web.Services.DashboardHeaderActionsService HeaderActions
+@inject TransactionDrawerService DrawerService
+@inject DashboardHeaderActionsService HeaderActions
+@inject IOptions<SmartOps.Infrastructure.TransactionSettings> TxSettings
 
-<div class="dashboard-shell py-5">
-    <div class="container-fluid">
-        <section class="dashboard-kpi-grid mb-4">
-            <article class="dashboard-panel dashboard-metric-card" style="--accent:#22d3ee;">
-                <div class="dashboard-metric-label">Tasa de Aprobación (%)</div>
-                <div class="dashboard-metric-value" id="metric-success-rate">@AnimatedSuccessRateDisplay</div>
-                <div class="dashboard-metric-subtitle">Sobre el conjunto de transacciones cargado.</div>
-            </article>
+<PageTitle>Centro de operaciones · SmartOps</PageTitle>
 
-            <article class="dashboard-panel dashboard-metric-card" style="--accent:#ef4444;">
-                <div class="dashboard-metric-label">Transacciones Fallidas</div>
-                <div class="dashboard-metric-value" id="metric-failed-count">@_animatedFailedCount</div>
-                <div class="dashboard-metric-subtitle">Casos listos para análisis o revisión.</div>
-            </article>
-
-            <article class="dashboard-panel dashboard-metric-card" style="--accent:#8b5cf6;">
-                <div class="d-flex justify-content-between align-items-start gap-2">
-                    <div class="dashboard-metric-label">Diagnósticos Realizados por IA</div>
-                    <button type="button" class="btn btn-sm btn-outline-light dashboard-chip-action" @onclick="OpenChartsModal">
-                        <i class="bi bi-graph-up"></i>
-                        <span>Ver gráficos</span>
-                    </button>
-                </div>
-                <div class="dashboard-metric-value" id="metric-diagnostics-count">@_animatedDiagnosticsCount</div>
-                <div class="dashboard-metric-subtitle">Resultados generados por el motor inteligente.</div>
-            </article>
-
-            <article class="dashboard-panel dashboard-metric-card" style="--accent:#14b8a6;">
-                <div class="dashboard-metric-label">Efectividad de IA (%)</div>
-                <div class="dashboard-metric-value" id="metric-useful-percent">@AnimatedUsefulPercentDisplay</div>
-                <div class="dashboard-metric-subtitle">Porcentaje de diagnósticos marcados como útiles.</div>
-            </article>
-        </section>
-
-        <section class="dashboard-panel dashboard-table-card">
-            <div class="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-end mb-3">
-                <div>
-                    <h3 class="dashboard-chart-title">Transacciones</h3>
-                    <p class="dashboard-chart-copy mb-0">Filtrá por los últimos 4 dígitos para investigar una tarjeta específica.</p>
-                </div>
-
-                <div>
-                    <div class="dashboard-filter-row">
-                        <input class="form-control dashboard-filter" placeholder="Filtrar por últimos 4 dígitos..." @bind="filterLast4" @bind:event="oninput" maxlength="4" pattern="\d*" inputmode="numeric" />
-                        @if (isAdminUser)
-                        {
-                            <div class="form-check form-switch dashboard-inline-toggle mb-0" title="Ver todos los registros">
-                                <InputCheckbox class="form-check-input" id="showAllRecordsDashboard" @bind-Value="showAllRecords" @bind-Value:after="ReloadDashboardAsync" />
-                            </div>
-                        }
-                    </div>
-                    <small class="dashboard-chart-copy">Escriba de 1 a 4 dígitos para filtrar en tiempo real (ej. 4, 43, 4532).</small>
-                </div>
-            </div>
-
-            @if (gridTransactions == null)
-            {
-                <div class="dashboard-empty-state">Loading...</div>
-            }
-            else if (!FilteredTransactions.Any() && !string.IsNullOrWhiteSpace(filterLast4))
-            {
-                <div class="dashboard-empty-state">No se encontraron transacciones para la tarjeta ingresada.</div>
-            }
-            else if (gridTransactions.Count == 0)
-            {
-                <div class="dashboard-empty-state">No transactions found.</div>
-            }
-            else
-            {
-                <div class="table-responsive dashboard-table-wrap">
-                    <table class="table table-borderless align-middle table-hover dashboard-table">
-                        <thead>
-                            <tr>
-                                <th class="ps-3">Id</th>
-                                <th>Fecha</th>
-                                <th>Monto</th>
-                                <th>Estado</th>
-                                <th class="text-end pe-3">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var t in FilteredTransactions.ToList())
-                            {
-                                <tr class="align-middle">
-                                    <td class="ps-3"><strong>@t.Id</strong></td>
-                                    <td>@t.OccurredAt?.ToString("yyyy-MM-dd HH:mm")</td>
-                                    <td>@t.Amount.ToString("C")</td>
-                                    <td>
-                                        <span class="badge rounded-pill dashboard-status-pill">@t.Status</span>
-                                    </td>
-                                    <td class="text-end pe-3">
-                                        <button class="btn btn-detail" @onclick="() => DrawerService.Open(new SmartOps.Web.Services.TransactionDto { Id = t.Id, CardLast4 = t.CardLast4, Timestamp = t.OccurredAt ?? DateTime.UtcNow, Amount = t.Amount, Status = t.Status, Channel = t.Provider, ErrorCode = t.ErrorMessage })">
-                                            <i class="bi bi-search"></i>
-                                            Detalle
-                                        </button>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            }
-        </section>
-    </div>
-</div>
-
-    <!-- Toast container -->
-    <div class="toasts-host p-3 position-fixed" style="right:24px;bottom:24px;z-index:9999;">
-        @foreach(var toast in toasts.ToList())
+<div class="dash" aria-busy="@(phase == LoadPhase.Loading ? "true" : "false")">
+    <div class="dash-head">
+        <div>
+            <h1 class="dash-title">Centro de operaciones</h1>
+            <p class="dash-subtitle">Transacciones fallidas en tiempo real y diagnósticos del motor de IA.</p>
+        </div>
+        @if (phase == LoadPhase.Loading)
         {
-            <div class="mb-2" style="max-width:360px;">
-                <div class="p-3" style="background:rgba(30,30,45,0.95);border:1px solid rgba(255,80,80,0.12);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.5);color:#fff;">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="small text-muted">Notificación</div>
-                            <div>@toast</div>
-                        </div>
-                        <button type="button" class="btn-close btn-close-white ms-2" aria-label="Close" @onclick="() => RemoveToast(toast)"></button>
+            <span class="dash-meta dash-loading" role="status">
+                <svg class="spinner-ring" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke-width="3"></circle><path d="M12 3a9 9 0 0 1 9 9" fill="none" stroke-width="3" stroke-linecap="round"></path></svg>
+                Cargando datos…
+            </span>
+        }
+        else
+        {
+            <span class="dash-meta">Fuente: @SourceLabel · actualiza cada @IntervalSeconds s</span>
+        }
+    </div>
+
+    @* ── Métricas ─────────────────────────────────────────────── *@
+    <div class="dash-swap">
+        @if (phase != LoadPhase.Ready)
+        {
+            <div class="dash-grid-metrics skel-block @SkeletonClass" aria-hidden="true">
+                @foreach (var w in SkeletonMetricWidths)
+                {
+                    <div class="dash-card dash-metric skel-stack">
+                        <span class="skel skel-line" style="width:@(w.Label)%"></span>
+                        <span class="skel skel-value" style="width:@(w.Value)%"></span>
+                        <span class="skel skel-line" style="width:@(w.Note)%"></span>
                     </div>
+                }
+            </div>
+        }
+        @if (phase != LoadPhase.Loading)
+        {
+            <div class="dash-grid-metrics @ContentClass">
+                <div class="dash-card dash-metric">
+                    <span class="dash-overline">Tasa de aprobación</span>
+                    <span class="dash-metric-value" id="metric-success-rate">@(_animatedSuccessRate)%</span>
+                    <span class="dash-small">Sobre las transacciones cargadas</span>
+                </div>
+                <div class="dash-card dash-metric">
+                    <span class="dash-overline"><span class="dot dot-danger" aria-hidden="true"></span>Transacciones fallidas</span>
+                    <span class="dash-metric-value" id="metric-failed-count">@_animatedFailedCount</span>
+                    <span class="dash-small">Casos listos para revisión</span>
+                </div>
+                <div class="dash-card dash-metric">
+                    <span class="dash-overline"><span class="dot dot-ai" aria-hidden="true"></span>Diagnósticos IA</span>
+                    <span class="dash-metric-value" id="metric-diagnostics-count">@_animatedDiagnosticsCount</span>
+                    <span class="dash-small">Generados por el motor</span>
+                </div>
+                <div class="dash-card dash-metric">
+                    <span class="dash-overline">Efectividad IA</span>
+                    <span class="dash-metric-value" id="metric-useful-percent">@(metrics.UsefulPercent < 0 ? "N/A" : _animatedUsefulPercent + "%")</span>
+                    <span class="dash-small">Marcados como útiles por operadores</span>
                 </div>
             </div>
         }
     </div>
 
-    @if (showChartsModal)
-    {
-    <div class="dashboard-modal-backdrop" @onclick="CloseChartsModal">
-        <div class="dashboard-modal-shell" @onclick:stopPropagation="true">
-            <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-                <div>
-                    <h3 class="dashboard-chart-title mb-1">Gráficos del dashboard</h3>
-                    <p class="dashboard-chart-copy mb-0">Motivos de falla y comparativa aprobadas vs. falladas.</p>
-                </div>
-                <button type="button" class="btn-close btn-close-white" aria-label="Close" @onclick="CloseChartsModal"></button>
+    @* ── Motivos de falla + Cola de diagnóstico ───────────────── *@
+    <div class="dash-swap">
+        @if (phase != LoadPhase.Ready)
+        {
+            <div class="dash-grid-panels skel-block @SkeletonClass" aria-hidden="true">
+                <section class="dash-card dash-panel skel-stack skel-gap-lg">
+                    <span class="skel skel-heading" style="width:35%"></span>
+                    <div class="skel-stack skel-gap-md">
+                        @foreach (var w in SkeletonReasonWidths)
+                        {
+                            <div class="skel-reason"><span class="skel skel-line" style="width:@(w.Label)%"></span><span class="skel skel-bar" style="width:@(w.Bar)%"></span></div>
+                        }
+                    </div>
+                </section>
+                <section class="dash-card dash-panel skel-stack skel-gap-lg">
+                    <span class="skel skel-heading" style="width:40%"></span>
+                    <span class="skel skel-big" style="width:30%"></span>
+                    <span class="skel skel-line" style="width:100%"></span>
+                    <span class="skel skel-line" style="width:50%"></span>
+                    <span class="skel skel-button"></span>
+                </section>
             </div>
+        }
+        @if (phase != LoadPhase.Loading)
+        {
+            <div class="dash-grid-panels @ContentClass">
+                <section class="dash-card dash-panel" aria-labelledby="reasons-title">
+                    <div class="dash-panel-head">
+                        <h2 class="dash-section-title" id="reasons-title">Motivos de falla</h2>
+                        <span class="dash-small">Sobre @metrics.FailedCount fallidas</span>
+                    </div>
+                    @if (metrics.FailureReasons.Count == 0)
+                    {
+                        <p class="dash-small m-0">Todavía no hay transacciones fallidas.</p>
+                    }
+                    else
+                    {
+                        <ul class="dash-reasons">
+                            @foreach (var r in metrics.FailureReasons)
+                            {
+                                <li class="dash-reason-row">
+                                    <span class="dash-reason-label" title="@r.Reason">@r.Reason</span>
+                                    <span class="dash-bar-track" aria-hidden="true"><span class="dash-bar-fill" style="width:@Css(r.BarPercent)%"></span></span>
+                                    <span class="dash-reason-pct">@r.Percent%</span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
 
-            <section class="dashboard-chart-grid dashboard-chart-grid-modal">
-                <article class="dashboard-panel dashboard-chart-card">
-                    <div class="dashboard-chart-head">
-                        <div>
-                            <h3 class="dashboard-chart-title">Motivos de Falla Más Frecuentes</h3>
-                            <p class="dashboard-chart-copy mb-0">Distribución de los errores más comunes en el panel actual.</p>
+                <section class="dash-card dash-panel dash-queue" aria-labelledby="queue-title">
+                    <div class="dash-panel-head">
+                        <h2 class="dash-section-title" id="queue-title">Cola de diagnóstico</h2>
+                        <span class="dash-small">Fallidas sin analizar por la IA</span>
+                    </div>
+                    <div class="dash-queue-figure">
+                        <span class="dash-queue-number" id="queue-pending-count">@metrics.PendingFailedCount</span>
+                        <span class="dash-muted">de @metrics.FailedCount fallidas sin diagnóstico</span>
+                    </div>
+                    <div class="dash-stack-track" aria-hidden="true">
+                        <span class="dash-stack-done" style="width:@Css(DiagnosedPercent)%"></span>
+                    </div>
+                    <div class="dash-legend">
+                        <span><span class="dash-swatch dash-swatch-ai" aria-hidden="true"></span>Diagnosticadas · @metrics.DiagnosedFailedCount</span>
+                        <span><span class="dash-swatch dash-swatch-pending" aria-hidden="true"></span>Pendientes · @metrics.PendingFailedCount</span>
+                    </div>
+                    <div class="dash-queue-actions">
+                        <button type="button" id="analyze-most-recent" class="btn-ds btn-ds-primary" disabled="@(MostRecentPending is null)" @onclick="AnalyzeMostRecent">
+                            @(MostRecentPending is null ? "No hay pendientes" : "Analizar la más reciente")
+                        </button>
+                    </div>
+                </section>
+            </div>
+        }
+    </div>
+
+    @* ── Tabla ────────────────────────────────────────────────── *@
+    <div class="dash-swap">
+        @if (phase != LoadPhase.Ready)
+        {
+            <section class="dash-card dash-table-card skel-block @SkeletonClass" aria-hidden="true">
+                <div class="dash-table-head">
+                    <div class="skel-stack skel-gap-sm skel-title-group">
+                        <span class="skel skel-heading skel-w-220"></span>
+                        <span class="skel skel-line skel-w-320"></span>
+                    </div>
+                    <span class="skel skel-input"></span>
+                </div>
+                <div class="skel-table">
+                    <div class="skel-table-header"></div>
+                    @foreach (var w in SkeletonRowReasonWidths)
+                    {
+                        <div class="skel-table-row">
+                            <span class="skel skel-line"></span><span class="skel skel-line"></span><span class="skel skel-line"></span>
+                            <span class="skel skel-line" style="width:@(w)%"></span><span class="skel skel-line"></span>
+                            <span class="skel skel-chip"></span><span class="skel skel-action"></span>
                         </div>
-                    </div>
-
-                    <div class="chart-host chart-host-modal">
-                        <canvas id="failureReasonsChart"></canvas>
-                    </div>
-                </article>
-
-                <article class="dashboard-panel dashboard-chart-card">
-                    <div class="dashboard-chart-head">
-                        <div>
-                            <h3 class="dashboard-chart-title">Transacciones Aprobadas vs. Falladas</h3>
-                            <p class="dashboard-chart-copy mb-0">Comparativa directa entre aprobaciones y rechazos.</p>
-                        </div>
-                    </div>
-
-                    <div class="chart-host chart-host-modal">
-                        <canvas id="transactionsSplitChart"></canvas>
-                    </div>
-                </article>
+                    }
+                </div>
             </section>
-        </div>
+        }
+        @if (phase != LoadPhase.Loading)
+        {
+            <section class="dash-card dash-table-card @ContentClass" aria-labelledby="tx-title">
+                <div class="dash-table-head">
+                    <div>
+                        <h2 class="dash-section-title" id="tx-title">Transacciones fallidas</h2>
+                        <p class="dash-small dash-table-sub">Las más recientes primero. Abrí una fila para ver el detalle.</p>
+                    </div>
+                    <div class="dash-filters">
+                        <label class="dash-search">
+                            <span class="visually-hidden">Buscar por últimos 4 dígitos de la tarjeta</span>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+                            <input type="text" inputmode="numeric" maxlength="4" pattern="\d*" placeholder="Últimos 4 dígitos"
+                                   value="@filterLast4" @oninput="OnFilterChanged" />
+                        </label>
+                        @if (isAdminUser)
+                        {
+                            <label class="dash-check">
+                                <input type="checkbox" checked="@showAllRecords" @onchange="OnIncludeApprovedChanged" />
+                                Incluir aprobadas
+                            </label>
+                        }
+                    </div>
+                </div>
+
+                @if (loadFailed)
+                {
+                    <p class="dash-empty" role="alert">No se pudieron cargar las transacciones. Recargá la página para reintentar.</p>
+                }
+                else if (FilteredTransactions.Count == 0)
+                {
+                    <p class="dash-empty">
+                        @(string.IsNullOrWhiteSpace(filterLast4) ? "No hay transacciones para mostrar." : "No se encontraron transacciones para la tarjeta ingresada.")
+                    </p>
+                }
+                else
+                {
+                    <div class="dash-table-scroll">
+                        <table class="dash-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">ID</th>
+                                    <th scope="col">Hora</th>
+                                    <th scope="col">Tarjeta</th>
+                                    <th scope="col">Motivo</th>
+                                    <th scope="col" class="num">Monto</th>
+                                    <th scope="col">Diagnóstico</th>
+                                    <th scope="col" class="num"><span class="visually-hidden">Acciones</span></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var t in PageRows)
+                                {
+                                    var failed = TransactionStatus.IsFailed(t.Status);
+                                    var diagnosed = diagnosedTxIds.Contains(t.Id);
+                                    <tr @key="t.Id">
+                                        <td class="mono">@t.Id</td>
+                                        <td class="mono muted">@FormatTime(t.OccurredAt)</td>
+                                        <td class="mono">@FormatCard(t.CardLast4)</td>
+                                        <td>
+                                            @if (failed)
+                                            {
+                                                <span class="dash-reason"><span class="dot dot-sm dot-danger" aria-hidden="true"></span>@ReasonOf(t)</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="dash-reason"><span class="dot dot-sm dot-success" aria-hidden="true"></span>Aprobada</span>
+                                            }
+                                        </td>
+                                        <td class="mono num">@MoneyFormat.Format(t.Amount, t.Currency)</td>
+                                        <td>
+                                            @if (!failed)
+                                            {
+                                                <span class="muted">—</span>
+                                            }
+                                            else if (diagnosed)
+                                            {
+                                                <span class="status-chip status-chip-ready"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Listo</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="status-chip status-chip-pending">Pendiente</span>
+                                            }
+                                        </td>
+                                        <td class="num">
+                                            @if (failed && !diagnosed)
+                                            {
+                                                <button type="button" class="btn-ds btn-ds-secondary row-action" aria-label="Analizar transacción @t.Id" @onclick="() => OpenDrawer(t, autoAnalyze: true)">Analizar</button>
+                                            }
+                                            else
+                                            {
+                                                <button type="button" class="btn-ds btn-ds-link row-action" aria-label="Ver transacción @t.Id" @onclick="() => OpenDrawer(t, autoAnalyze: false)">Ver</button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <nav class="dash-pager" aria-label="Paginación de transacciones">
+                        <span class="dash-small">@PageSummary</span>
+                        <div class="dash-pager-buttons">
+                            <button type="button" class="btn-ds btn-ds-secondary" disabled="@(CurrentPage <= 1)" @onclick="PrevPage">Anterior</button>
+                            <button type="button" class="btn-ds btn-ds-secondary" disabled="@(CurrentPage >= TotalPages)" @onclick="NextPage">Siguiente</button>
+                        </div>
+                    </nav>
+                }
+            </section>
+        }
+    </div>
+</div>
+
+@if (toasts.Count > 0)
+{
+    <div class="dash-toasts" role="status" aria-live="polite">
+        @foreach (var toast in toasts.ToList())
+        {
+            <div class="dash-toast">
+                <span class="dot dot-danger" aria-hidden="true"></span>
+                <span class="dash-toast-text">@toast</span>
+                <button type="button" class="dash-toast-close" aria-label="Cerrar aviso" @onclick="() => toasts.Remove(toast)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                </button>
+            </div>
+        }
     </div>
 }
 
 @code {
-    private List<Transaction>? allTransactions;
-    private List<Transaction>? gridTransactions;
-    private List<Transaction>? failedTransactions;
-    private int FailedTransactionsCount;
-    private int DiagnosticsCount;
-    private int ApprovedTransactionsCount;
-    private int FailedChartCount;
-    private int ApprovedChartCount;
-    private int UsefulPercent;
+    public const int PageSize = 20;
+
+    // Reglas de la transición (docs/redesign/README.md, «Transición»): el skeleton solo aparece si los
+    // datos tardan más de 200 ms (lo resuelve CSS con un animation-delay de 200 ms, también en el
+    // prerender) y, si apareció, queda al menos 300 ms. Después cada bloque hace crossfade (180 ms) y
+    // recién ahí arranca el count-up.
+    internal static readonly TimeSpan SkeletonDelay = TimeSpan.FromMilliseconds(200);
+    internal static readonly TimeSpan SkeletonMinVisible = TimeSpan.FromMilliseconds(300);
+    internal static readonly TimeSpan CrossfadeDuration = TimeSpan.FromMilliseconds(180);
+
+    private static readonly (int Label, int Value, int Note)[] SkeletonMetricWidths = { (55, 35, 80), (65, 40, 70), (50, 30, 75), (45, 38, 85) };
+    private static readonly (int Label, int Bar)[] SkeletonReasonWidths = { (80, 100), (70, 85), (75, 80), (85, 70), (60, 10) };
+    private static readonly int[] SkeletonRowReasonWidths = { 50, 40, 55, 45 };
+
+    private enum LoadPhase { Loading, Swapping, Ready }
+
+    private LoadPhase phase = LoadPhase.Loading;
+    private bool loadFailed;
+
+    private List<Transaction> allTransactions = new();
+    private List<Diagnostic> diagnosticsData = new();
+    private List<DiagnosticFeedback> feedbackData = new();
+    private HashSet<int> diagnosedTxIds = new();
+    private DashboardMetrics metrics = DashboardMetricsHelper.Build(null, null, null);
+
     private bool showAllRecords;
     private bool isAdminUser;
-    private bool chartsDirty;
-    private bool chartsRendering;
-    private bool showChartsModal;
-    private string? currentUserId;
-    private int SuccessRatePercent;
-    private int TotalTransactionsCount;
-    private List<(string Reason, int Count)> FailureReasons = new();
-    private readonly Dictionary<int, bool> processing = new();
-    private readonly Dictionary<int, string> diagnostics = new();
-    private readonly Dictionary<int, string> technicalDetails = new();
-    private readonly HashSet<int> showTech = new();
     private string filterLast4 = string.Empty;
+    private int currentPage = 1;
 
-    // Count-up animation bookkeeping for the KPI cards: tracks the last value that was
-    // actually animated to, so live SignalR updates animate from the previous value
-    // (not always from zero) while the very first render still counts up from zero.
-    private bool metricsDirty = true;
-    private bool metricsAnimatedOnce;
+    // Count-up: valor al que se animó la última vez, para que las actualizaciones en vivo animen
+    // desde el valor anterior y la primera carga desde cero.
+    private bool metricsDirty;
     private int _animatedSuccessRate;
     private int _animatedFailedCount;
     private int _animatedDiagnosticsCount;
     private int _animatedUsefulPercent;
 
-    // SignalR real-time
     private HubConnection? hubConnection;
-    private bool realtimePaused = false;
-    private List<string> toasts = new();
+    private bool realtimePaused;
+    private bool disposed;
+    private readonly List<string> toasts = new();
 
-    private static string FormatCard(string? last4)
-    {
-        if (string.IsNullOrWhiteSpace(last4))
-        {
-            return "-";
-        }
+    private int IntervalSeconds => Math.Max(1, TxSettings.Value.IntervalSeconds);
 
-        return $"•••• {last4}";
-    }
+    private string SourceLabel =>
+        string.Equals(TxSettings.Value.Provider, "Simulator", StringComparison.OrdinalIgnoreCase)
+            ? "simulador"
+            : TxSettings.Value.Provider;
 
-    private IEnumerable<Transaction> FilteredTransactions
+    private string SkeletonClass => phase == LoadPhase.Swapping ? "is-leaving" : string.Empty;
+    private string ContentClass => phase == LoadPhase.Swapping ? "is-entering" : string.Empty;
+
+    private double DiagnosedPercent =>
+        metrics.FailedCount == 0 ? 0 : Math.Round(metrics.DiagnosedFailedCount * 100.0 / metrics.FailedCount, 1);
+
+    private Transaction? MostRecentPending =>
+        allTransactions
+            .Where(t => TransactionStatus.IsFailed(t.Status) && !diagnosedTxIds.Contains(t.Id))
+            .OrderByDescending(t => t.OccurredAt)
+            .ThenByDescending(t => t.Id)
+            .FirstOrDefault();
+
+    private List<Transaction> FilteredTransactions
     {
         get
         {
-            var list = failedTransactions ?? Enumerable.Empty<Transaction>();
+            IEnumerable<Transaction> list = showAllRecords
+                ? allTransactions
+                : allTransactions.Where(t => TransactionStatus.IsFailed(t.Status));
 
-            if (showAllRecords)
+            if (!string.IsNullOrWhiteSpace(filterLast4) && filterLast4.Length <= 4 && filterLast4.All(char.IsDigit))
             {
-                list = gridTransactions ?? Enumerable.Empty<Transaction>();
+                list = list.Where(t => (t.CardLast4 ?? string.Empty).Contains(filterLast4));
             }
 
-            if (string.IsNullOrWhiteSpace(filterLast4))
-            {
-                return list;
-            }
-
-            if (filterLast4.Length > 4 || !filterLast4.All(char.IsDigit))
-            {
-                return list;
-            }
-
-            return list.Where(t => (t.CardLast4 ?? string.Empty).Contains(filterLast4));
+            return list.ToList();
         }
     }
 
-    protected override async Task OnInitializedAsync()
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredTransactions.Count / (double)PageSize));
+
+    // Si la lista se achica (filtro, toggle), la página actual nunca queda fuera de rango.
+    private int CurrentPage => Math.Min(currentPage, TotalPages);
+
+    private IEnumerable<Transaction> PageRows =>
+        FilteredTransactions.Skip((CurrentPage - 1) * PageSize).Take(PageSize);
+
+    private string PageSummary
     {
-        await LoadMetricsAsync();
-        await LoadGridAsync();
-        chartsDirty = true;
-        // Hub setup moved to OnAfterRenderAsync(firstRender) to avoid InvalidCastException
-        // during SSR pre-render (InvokeAsync has no RendererSynchronizationContext in SSR)
+        get
+        {
+            var total = FilteredTransactions.Count;
+            var from = (CurrentPage - 1) * PageSize + 1;
+            var to = Math.Min(CurrentPage * PageSize, total);
+            return $"{from}–{to} de {total} · Página {CurrentPage} de {TotalPages}";
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (metricsDirty)
-        {
-            await AnimateMetricsAsync();
-            metricsDirty = false;
-        }
-
-        if (firstRender && hubConnection == null)
+        // OnAfterRenderAsync solo corre en modo interactivo: el prerender muestra el esqueleto
+        // (invisible los primeros 200 ms por CSS) y los datos se cargan una sola vez, acá.
+        if (firstRender)
         {
             HeaderActions.Register(() =>
             {
                 ToggleRealtime();
                 return Task.CompletedTask;
             }, realtimePaused);
+            DrawerService.DiagnosticsChanged += OnDiagnosticsChanged;
 
-            try
-            {
-                hubConnection = new HubConnectionBuilder()
-                    .WithUrl(NavigationManager.ToAbsoluteUri("/hubs/transactions"))
-                    .WithAutomaticReconnect()
-                    .Build();
-
-                hubConnection.On<int>("ReceiveTransaction", async (txId) =>
-                {
-                    if (realtimePaused) return;
-
-                    var tx = await Db.Transactions.FindAsync(txId);
-                    if (tx == null) return;
-
-                    await InvokeAsync(() =>
-                    {
-                        allTransactions ??= new List<Transaction>();
-                        gridTransactions ??= new List<Transaction>();
-                        failedTransactions ??= new List<Transaction>();
-
-                        allTransactions.Insert(0, tx);
-
-                        if (string.Equals(tx.Status, "Failed", StringComparison.OrdinalIgnoreCase))
-                            failedTransactions.Insert(0, tx);
-
-                        if (!showAllRecords)
-                            gridTransactions = failedTransactions.ToList();
-                        else
-                            gridTransactions.Insert(0, tx);
-
-                        TotalTransactionsCount++;
-                        if (TransactionStatus.IsFailed(tx.Status))
-                        {
-                            FailedTransactionsCount++;
-                            FailedChartCount++;
-                        }
-                        else if (TransactionStatus.IsApproved(tx.Status))
-                        {
-                            ApprovedTransactionsCount++;
-                            ApprovedChartCount++;
-                        }
-
-                        SuccessRatePercent = SmartOps.Web.Services.DashboardMetricsHelper.SuccessRate(ApprovedTransactionsCount, TotalTransactionsCount);
-                        metricsDirty = true;
-
-                        if (!string.IsNullOrWhiteSpace(tx.ErrorMessage))
-                        {
-                            var toastMsg = $"Transacción {tx.Id} falló: {tx.ErrorMessage}";
-                            toasts.Insert(0, toastMsg);
-                            var captured = toastMsg;
-                            _ = Task.Delay(8000).ContinueWith(_ =>
-                                InvokeAsync(() => { toasts.Remove(captured); StateHasChanged(); }));
-                        }
-
-                        StateHasChanged();
-                    });
-                });
-
-                // Absorb NotificationCreated to prevent unhandled-message warnings
-                hubConnection.On<int>("NotificationCreated", _ => Task.CompletedTask);
-
-                await hubConnection.StartAsync();
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning(ex, "Failed to start SignalR connection for dashboard.");
-            }
-        }
-
-        if (!showChartsModal || !chartsDirty || chartsRendering)
-        {
+            _ = StartHubAsync();
+            await LoadInitialAsync();
             return;
         }
 
-        chartsRendering = true;
+        if (phase == LoadPhase.Ready && metricsDirty)
+        {
+            metricsDirty = false;
+            await AnimateMetricsAsync();
+        }
+    }
 
+    private async Task LoadInitialAsync()
+    {
+        var sw = Stopwatch.StartNew();
         try
         {
-            await RefreshChartsAsync();
-            chartsDirty = false;
+            await LoadAllAsync();
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Dashboard charts failed to render.");
+            Logger.LogError(ex, "Dashboard failed to load data.");
+            loadFailed = true;
         }
-        finally
+
+        if (disposed) return;
+
+        var elapsed = sw.Elapsed;
+        if (elapsed >= SkeletonDelay)
         {
-            chartsRendering = false;
+            var minEnd = SkeletonDelay + SkeletonMinVisible;
+            if (elapsed < minEnd) await Task.Delay(minEnd - elapsed);
+
+            phase = LoadPhase.Swapping;
+            StateHasChanged();
+            await Task.Delay(CrossfadeDuration);
+            if (disposed) return;
         }
+
+        phase = LoadPhase.Ready;
+        metricsDirty = true;
+        StateHasChanged();
+    }
+
+    private async Task LoadAllAsync()
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = auth.User;
+        isAdminUser = user?.IsInRole("Auditor") == true || user?.IsInRole("Admin") == true;
+
+        await DbGate.RunAsync(async () =>
+        {
+            allTransactions = await Db.Transactions.AsNoTracking()
+                .OrderByDescending(t => t.OccurredAt).ThenByDescending(t => t.Id)
+                .ToListAsync();
+            diagnosticsData = await Db.Diagnostics.AsNoTracking().ToListAsync();
+            feedbackData = await Db.DiagnosticFeedback.AsNoTracking().ToListAsync();
+        });
+
+        RecomputeMetrics();
+    }
+
+    private void RecomputeMetrics()
+    {
+        diagnosedTxIds = diagnosticsData.Select(d => d.TransactionId).ToHashSet();
+        metrics = DashboardMetricsHelper.Build(allTransactions, feedbackData, diagnosticsData);
+        metricsDirty = true;
+    }
+
+    private void OnDiagnosticsChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            if (disposed) return;
+            try
+            {
+                await DbGate.RunAsync(async () =>
+                {
+                    diagnosticsData = await Db.Diagnostics.AsNoTracking().ToListAsync();
+                    feedbackData = await Db.DiagnosticFeedback.AsNoTracking().ToListAsync();
+                });
+                RecomputeMetrics();
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Dashboard failed to refresh diagnostics.");
+            }
+        });
+    }
+
+    private async Task StartHubAsync()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(NavigationManager.ToAbsoluteUri("/hubs/transactions"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            hubConnection.On<int>("ReceiveTransaction", OnTransactionReceivedAsync);
+            // Lo consume NotificationBell; acá solo se absorbe para evitar warnings de mensaje sin handler.
+            hubConnection.On<int>("NotificationCreated", _ => Task.CompletedTask);
+
+            await hubConnection.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to start SignalR connection for dashboard.");
+        }
+    }
+
+    private async Task OnTransactionReceivedAsync(int txId)
+    {
+        if (realtimePaused || disposed) return;
+
+        Transaction? tx;
+        try
+        {
+            tx = await DbGate.RunAsync(() => Db.Transactions.AsNoTracking().FirstOrDefaultAsync(t => t.Id == txId));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Dashboard failed to load live transaction {Id}", txId);
+            return;
+        }
+
+        if (tx == null) return;
+
+        await InvokeAsync(() =>
+        {
+            if (disposed || allTransactions.Any(t => t.Id == tx.Id)) return;
+
+            // Las nuevas entran arriba.
+            allTransactions.Insert(0, tx);
+            RecomputeMetrics();
+
+            if (TransactionStatus.IsFailed(tx.Status))
+            {
+                var toastMsg = $"Transacción {tx.Id} falló: {ReasonOf(tx)}";
+                toasts.Insert(0, toastMsg);
+                _ = Task.Delay(8000).ContinueWith(_ => InvokeAsync(() =>
+                {
+                    if (disposed) return;
+                    toasts.Remove(toastMsg);
+                    StateHasChanged();
+                }));
+            }
+
+            StateHasChanged();
+        });
     }
 
     private void ToggleRealtime()
@@ -380,281 +585,88 @@
         HeaderActions.UpdateState(realtimePaused);
     }
 
-    private void RemoveToast(string t)
+    private void OnFilterChanged(ChangeEventArgs e)
     {
-        toasts.Remove(t);
+        filterLast4 = e.Value?.ToString() ?? string.Empty;
+        currentPage = 1;
     }
 
-    private string SuccessRateDisplay => SuccessRatePercent + "%";
-    private string UsefulPercentDisplay => UsefulPercent < 0 ? "N/A" : UsefulPercent + "%";
-
-    // These drive the KPI card markup instead of the raw final values: they only change once
-    // the count-up JS animation actually finishes, so the initial/rerender paint always starts
-    // at the last animated value (0 on first load) instead of flashing the final number first.
-    private string AnimatedSuccessRateDisplay => _animatedSuccessRate + "%";
-    private string AnimatedUsefulPercentDisplay => UsefulPercent < 0 ? "N/A" : _animatedUsefulPercent + "%";
-
-    private async Task ReloadDashboardAsync()
+    private void OnIncludeApprovedChanged(ChangeEventArgs e)
     {
-        await LoadMetricsAsync();
-        await LoadGridAsync();
-        chartsDirty = true;
+        showAllRecords = e.Value is bool b && b;
+        currentPage = 1;
     }
 
-    private async Task OpenChartsModal()
+    private void PrevPage() => currentPage = Math.Max(1, CurrentPage - 1);
+
+    private void NextPage() => currentPage = Math.Min(TotalPages, CurrentPage + 1);
+
+    private void OpenDrawer(Transaction t, bool autoAnalyze)
     {
-        showChartsModal = true;
-        chartsDirty = true;
-        await InvokeAsync(StateHasChanged);
+        DrawerService.Open(new TransactionDto
+        {
+            Id = t.Id,
+            CardLast4 = t.CardLast4,
+            Timestamp = t.OccurredAt ?? DateTime.UtcNow,
+            Amount = t.Amount,
+            Currency = t.Currency,
+            Status = t.Status,
+            Channel = t.Provider,
+            ErrorCode = t.ErrorMessage
+        }, autoAnalyze);
     }
 
-    private async Task CloseChartsModal()
+    private void AnalyzeMostRecent()
     {
-        showChartsModal = false;
-        await JS.InvokeVoidAsync("dashboardCharts.destroy", "failureReasonsChart");
-        await JS.InvokeVoidAsync("dashboardCharts.destroy", "transactionsSplitChart");
-    }
-
-    private async Task LoadMetricsAsync()
-    {
-        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = auth.User;
-        currentUserId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        isAdminUser = user?.IsInRole("Auditor") == true || user?.IsInRole("Admin") == true;
-
-        var diagnosticsData = await Db.Diagnostics.ToListAsync();
-        var transactions = await Db.Transactions.ToListAsync();
-        var feedback = await Db.DiagnosticFeedback.ToListAsync();
-        var metrics = SmartOps.Web.Services.DashboardMetricsHelper.Build(transactions, feedback, diagnosticsData);
-
-        FailedTransactionsCount = metrics.FailedCount;
-        DiagnosticsCount = metrics.DiagnosticsCount;
-        ApprovedTransactionsCount = metrics.ApprovedCount;
-        TotalTransactionsCount = metrics.TotalCount;
-        SuccessRatePercent = metrics.SuccessRatePercent;
-        UsefulPercent = metrics.UsefulPercent;
-        FailureReasons = metrics.FailureReasons.Select(r => (r.Reason, r.Count)).ToList();
-        FailedChartCount = metrics.FailedCount;
-        ApprovedChartCount = metrics.ApprovedCount;
-        metricsDirty = true;
+        var pending = MostRecentPending;
+        if (pending is null) return;
+        OpenDrawer(pending, autoAnalyze: true);
     }
 
     private async Task AnimateMetricsAsync()
     {
-        var fromSuccess = metricsAnimatedOnce ? _animatedSuccessRate : 0;
-        var fromFailed = metricsAnimatedOnce ? _animatedFailedCount : 0;
-        var fromDiagnostics = metricsAnimatedOnce ? _animatedDiagnosticsCount : 0;
-        var fromUseful = metricsAnimatedOnce ? _animatedUsefulPercent : 0;
-
         try
         {
-            await JS.InvokeVoidAsync("smartOpsAnimations.countUp", "metric-success-rate", fromSuccess, SuccessRatePercent, "%", 1200);
-            await JS.InvokeVoidAsync("smartOpsAnimations.countUp", "metric-failed-count", fromFailed, FailedTransactionsCount, "", 1200);
-            await JS.InvokeVoidAsync("smartOpsAnimations.countUp", "metric-diagnostics-count", fromDiagnostics, DiagnosticsCount, "", 1200);
+            await JS.InvokeVoidAsync("smartOpsAnimations.countUp", "metric-success-rate", _animatedSuccessRate, metrics.SuccessRatePercent, "%", 1200);
+            await JS.InvokeVoidAsync("smartOpsAnimations.countUp", "metric-failed-count", _animatedFailedCount, metrics.FailedCount, "", 1200);
+            await JS.InvokeVoidAsync("smartOpsAnimations.countUp", "metric-diagnostics-count", _animatedDiagnosticsCount, metrics.DiagnosticsCount, "", 1200);
 
-            // "N/A" (UsefulPercent < 0) has no numeric value to count up; leave it as static text.
-            if (UsefulPercent >= 0)
+            // "N/A" no tiene número que animar.
+            if (metrics.UsefulPercent >= 0)
             {
-                await JS.InvokeVoidAsync("smartOpsAnimations.countUp", "metric-useful-percent", Math.Max(fromUseful, 0), UsefulPercent, "%", 1200);
+                await JS.InvokeVoidAsync("smartOpsAnimations.countUp", "metric-useful-percent", _animatedUsefulPercent, metrics.UsefulPercent, "%", 1200);
             }
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Failed to animate dashboard metric cards.");
+            Logger.LogDebug(ex, "Failed to animate dashboard metric cards.");
         }
 
-        _animatedSuccessRate = SuccessRatePercent;
-        _animatedFailedCount = FailedTransactionsCount;
-        _animatedDiagnosticsCount = DiagnosticsCount;
-        _animatedUsefulPercent = UsefulPercent;
-        metricsAnimatedOnce = true;
+        // Sin re-render acá: el JS deja el valor final en el DOM y el próximo render escribe el mismo.
+        _animatedSuccessRate = metrics.SuccessRatePercent;
+        _animatedFailedCount = metrics.FailedCount;
+        _animatedDiagnosticsCount = metrics.DiagnosticsCount;
+        _animatedUsefulPercent = Math.Max(metrics.UsefulPercent, 0);
     }
 
-    private async Task LoadGridAsync()
-    {
-        allTransactions = await Db.Transactions.OrderByDescending(t => t.OccurredAt).ToListAsync();
-        failedTransactions = allTransactions.Where(t => string.Equals(t.Status, "Failed", StringComparison.OrdinalIgnoreCase)).ToList();
-        gridTransactions = showAllRecords ? allTransactions : failedTransactions;
-    }
+    private static string ReasonOf(Transaction t) =>
+        string.IsNullOrWhiteSpace(t.ErrorMessage) ? DashboardMetricsHelper.UnknownReason : t.ErrorMessage!;
 
-    private async Task RefreshChartsAsync()
-    {
-        var failureLabels = FailureReasons.Select(x => x.Reason).ToArray();
-        var failureValues = FailureReasons.Select(x => x.Count).ToArray();
+    private static string Css(double value) => value.ToString("0.#", CultureInfo.InvariantCulture);
 
-        await JS.InvokeVoidAsync("dashboardCharts.renderDoughnut", "failureReasonsChart", failureLabels, failureValues);
-        await JS.InvokeVoidAsync(
-            "dashboardCharts.renderBar",
-            "transactionsSplitChart",
-            new[] { "Totales" },
-            new[] { ApprovedChartCount },
-            new[] { FailedChartCount });
-    }
+    private static string FormatCard(string? last4) => string.IsNullOrWhiteSpace(last4) ? "—" : $"•••• {last4}";
 
-    private bool IsProcessing(int id) => processing.TryGetValue(id, out var v) && v;
-
-    private async Task AnalyzeAsync(int id)
-    {
-        processing[id] = true;
-        diagnostics[id] = string.Empty;
-        technicalDetails[id] = string.Empty;
-        showTech.Remove(id);
-        StateHasChanged();
-
-        try
-        {
-            await Task.Delay(2500);
-
-            var tx = await Db.Transactions.FindAsync(id);
-            if (tx == null)
-            {
-                diagnostics[id] = "Transaction not found.";
-            }
-            else
-            {
-                try
-                {
-                    var state = await AuthStateProvider.GetAuthenticationStateAsync();
-                    var user = state.User;
-                    var createdByUserId = user?.Identity != null && user.Identity.IsAuthenticated
-                        ? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                        : null;
-
-                    var md = await Orchestrator.RunDiagnosticAsync(tx, createdByUserId);
-                    ShowDiagnostic(id, md ?? string.Empty);
-                    await LoadMetricsAsync();
-                    chartsDirty = true;
-                }
-                catch (SmartOps.Web.Services.AiEngineException aiEx)
-                {
-                    // Operator-facing provider error (invalid API key, rate limit, timeout, ...).
-                    diagnostics[id] = $"⚠️ {aiEx.Message}";
-                    technicalDetails[id] = aiEx.ToString();
-                }
-                catch (Exception exInner)
-                {
-                    diagnostics[id] = "⚠️ No logramos procesar el diagnóstico inteligente en este momento. Por favor, reintentá en unos instantes.";
-                    technicalDetails[id] = exInner.ToString();
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            diagnostics[id] = "⚠️ No logramos procesar el diagnóstico inteligente en este momento. Por favor, reintentá en unos instantes.";
-            technicalDetails[id] = ex.ToString();
-        }
-        finally
-        {
-            processing[id] = false;
-            StateHasChanged();
-        }
-    }
-
-    private static Guid CreateDeterministicGuidForInt(int id)
-    {
-        var ns = System.Text.Encoding.UTF8.GetBytes("SmartOps.Transaction.IntMapping");
-        var idBytes = System.Text.Encoding.UTF8.GetBytes(id.ToString());
-        using var md5 = System.Security.Cryptography.MD5.Create();
-        var hash = md5.ComputeHash(ns.Concat(idBytes).ToArray());
-        return new Guid(hash.Take(16).ToArray());
-    }
-
-    private string RenderMarkdown(string md)
-    {
-        if (string.IsNullOrWhiteSpace(md))
-        {
-            return string.Empty;
-        }
-
-        var encoded = System.Net.WebUtility.HtmlEncode(md);
-        var lines = encoded.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        var sb = new System.Text.StringBuilder();
-        var inList = false;
-
-        foreach (var raw in lines)
-        {
-            var line = raw.Trim();
-
-            if (line.StartsWith("## "))
-            {
-                if (inList)
-                {
-                    sb.AppendLine("</ul>");
-                    inList = false;
-                }
-
-                sb.AppendLine($"<h4>{line.Substring(3).Trim()}</h4>");
-                continue;
-            }
-
-            if (line.StartsWith("- "))
-            {
-                if (!inList)
-                {
-                    sb.AppendLine("<ul style=\"margin-left:1rem;padding-left:1rem\">\n");
-                    inList = true;
-                }
-
-                sb.AppendLine($"<li>{line.Substring(2).Trim()}</li>");
-                continue;
-            }
-
-            if (inList)
-            {
-                sb.AppendLine("</ul>");
-                inList = false;
-            }
-
-            sb.AppendLine($"<p>{line}</p>");
-        }
-
-        if (inList)
-        {
-            sb.AppendLine("</ul>");
-        }
-
-        return sb.ToString();
-    }
-
-    private void ShowDiagnostic(int id, string md)
-    {
-        var otherKeys = diagnostics.Keys.ToList();
-        foreach (var k in otherKeys)
-        {
-            if (k != id)
-            {
-                diagnostics[k] = string.Empty;
-            }
-        }
-
-        diagnostics[id] = md;
-        technicalDetails[id] = string.Empty;
-        showTech.Remove(id);
-    }
-
-    private void CloseDiagnostic(int id)
-    {
-        diagnostics[id] = string.Empty;
-        technicalDetails.Remove(id);
-        showTech.Remove(id);
-    }
-
-    private void ToggleTech(Microsoft.AspNetCore.Components.Web.MouseEventArgs e, int id)
-    {
-        if (showTech.Contains(id))
-        {
-            showTech.Remove(id);
-        }
-        else
-        {
-            showTech.Add(id);
-        }
-    }
+    private static string FormatTime(DateTime? utc) =>
+        utc is null ? "—" : DateTime.SpecifyKind(utc.Value, DateTimeKind.Utc).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
 
     public async ValueTask DisposeAsync()
     {
+        disposed = true;
+        DrawerService.DiagnosticsChanged -= OnDiagnosticsChanged;
         HeaderActions.Unregister();
         if (hubConnection is not null)
-            await hubConnection.DisposeAsync();
+        {
+            try { await hubConnection.DisposeAsync(); } catch { /* el circuito se está cerrando */ }
+        }
     }
 }

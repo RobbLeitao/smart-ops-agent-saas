@@ -175,7 +175,10 @@ builder.Services.AddScoped<SmartOps.Web.Services.DashboardHeaderActionsService>(
 
 // Register TransactionNotifier which bridges publisher events to SignalR
 builder.Services.AddSingleton<SmartOps.Web.Services.TransactionNotifier>();
-    builder.Services.AddSingleton<SmartOps.Web.Services.TransactionDrawerService>();
+// Scoped = uno por circuito. Antes era singleton: abrir el Drawer en una sesión lo abría en
+// todas las sesiones conectadas (y «Analizar la más reciente» habría analizado en todas).
+builder.Services.AddScoped<SmartOps.Web.Services.TransactionDrawerService>();
+builder.Services.AddScoped<SmartOps.Web.Services.DbContextGate>();
 // Ensure HubContext is available via SignalR server support; SignalR is included in ASP.NET Core
 builder.Services.AddSignalR();
 
