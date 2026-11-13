@@ -114,9 +114,7 @@ public class SimulatorTransactionService : BackgroundService, ITransactionPublis
                         }
                     }
 
-                    _logger.LogInformation("[DI-PROBE] Simulator about to invoke OnTransactionCreated for {Id}", tx.Id);
                     OnTransactionCreated?.Invoke(this, new TransactionEventArgs(tx));
-                    _logger.LogInformation("[DI-PROBE] Simulator invoked OnTransactionCreated for {Id}", tx.Id);
                 }
                 catch (Exception ex)
                 {

@@ -22,7 +22,6 @@
     {
         CapturedException = exception;
         Logger.LogError(exception, "Unhandled exception in DiagnosticsHistory");
-        Console.Error.WriteLine(exception.ToString());
         StateHasChanged();
         return Task.CompletedTask;
     }

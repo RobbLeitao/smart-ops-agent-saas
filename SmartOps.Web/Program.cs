@@ -285,13 +285,6 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 
 var app = builder.Build();
 
-// Debug endpoint to capture client-side clicks and report to server logs
-app.MapPost("/api/debug/click", async (HttpContext http, ILogger<Program> logger) =>
-{
-    logger.LogInformation("/api/debug/click received from {RemoteIp}", http.Connection.RemoteIpAddress);
-    await http.Response.WriteAsync("ok");
-});
-
 // Ensure the database schema exists on startup
 using (var scope = app.Services.CreateScope())
 {
@@ -406,31 +399,6 @@ try
 }
 catch { }
 
-// Temporary DI probe: subscribe a console handler to ITransactionPublisher to verify events are emitted.
-try
-{
-    var publisher = app.Services.GetService<SmartOps.Core.Interfaces.ITransactionPublisher>();
-    if (publisher != null)
-    {
-        publisher.OnTransactionCreated += (s, e) =>
-        {
-            try
-            {
-                Console.WriteLine($"[DI-PROBE] Event fired for transaction {e.Transaction.Id} status={e.Transaction.Status} gateway={e.Transaction.GatewayReference}");
-            }
-            catch { }
-        };
-        Console.WriteLine("[DI-PROBE] Subscribed temporary console handler to ITransactionPublisher.");
-    }
-    else
-    {
-        Console.WriteLine("[DI-PROBE] ITransactionPublisher not registered/resolvable.");
-    }
-}
-catch (Exception ex)
-{
-    Console.WriteLine("[DI-PROBE] Exception while subscribing probe: " + ex);
-}
 
 
 // Configure the HTTP request pipeline.
@@ -453,40 +421,51 @@ app.MapRazorComponents<App>()
 // Map SignalR hub for transactions
 app.MapHub<SmartOps.Web.Hubs.TransactionHub>("/hubs/transactions");
 
-// Temporary diagnostic endpoint to inspect DI and publisher subscribers
-app.MapGet("/debug/diag", (IServiceProvider sp) =>
+// Debug-only endpoints: never mapped outside Development.
+if (app.Environment.IsDevelopment())
 {
-    var pid = System.Diagnostics.Process.GetCurrentProcess().Id;
-    var notifier = sp.GetService<SmartOps.Web.Services.TransactionNotifier>();
-    var publisher = sp.GetService<SmartOps.Core.Interfaces.ITransactionPublisher>();
-    int subscriberCount = 0;
-    try
+    // Debug endpoint to capture client-side clicks and report to server logs
+    app.MapPost("/api/debug/click", async (HttpContext http, ILogger<Program> logger) =>
     {
-        var ev = publisher?.GetType().GetEvent("OnTransactionCreated");
-        if (ev != null)
+        logger.LogInformation("/api/debug/click received from {RemoteIp}", http.Connection.RemoteIpAddress);
+        await http.Response.WriteAsync("ok");
+    });
+
+    // Temporary diagnostic endpoint to inspect DI and publisher subscribers
+    app.MapGet("/debug/diag", (IServiceProvider sp) =>
+    {
+        var pid = System.Diagnostics.Process.GetCurrentProcess().Id;
+        var notifier = sp.GetService<SmartOps.Web.Services.TransactionNotifier>();
+        var publisher = sp.GetService<SmartOps.Core.Interfaces.ITransactionPublisher>();
+        int subscriberCount = 0;
+        try
         {
-            var fi = publisher.GetType().GetField("OnTransactionCreated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-            if (fi != null)
+            var ev = publisher?.GetType().GetEvent("OnTransactionCreated");
+            if (ev != null)
             {
-                var dlg = fi.GetValue(publisher) as MulticastDelegate;
-                if (dlg != null) subscriberCount = dlg.GetInvocationList().Length;
-            }
-            else
-            {
-                // Try property-style backing field
-                var prop = publisher.GetType().GetField("_onTransactionCreated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-                if (prop != null)
+                var fi = publisher.GetType().GetField("OnTransactionCreated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                if (fi != null)
                 {
-                    var dlg2 = prop.GetValue(publisher) as MulticastDelegate;
-                    if (dlg2 != null) subscriberCount = dlg2.GetInvocationList().Length;
+                    var dlg = fi.GetValue(publisher) as MulticastDelegate;
+                    if (dlg != null) subscriberCount = dlg.GetInvocationList().Length;
+                }
+                else
+                {
+                    // Try property-style backing field
+                    var prop = publisher.GetType().GetField("_onTransactionCreated", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                    if (prop != null)
+                    {
+                        var dlg2 = prop.GetValue(publisher) as MulticastDelegate;
+                        if (dlg2 != null) subscriberCount = dlg2.GetInvocationList().Length;
+                    }
                 }
             }
         }
-    }
-    catch { }
+        catch { }
 
-    return Results.Json(new { pid, notifierPresent = notifier != null, publisherPresent = publisher != null, subscriberCount });
-});
+        return Results.Json(new { pid, notifierPresent = notifier != null, publisherPresent = publisher != null, subscriberCount });
+    });
+}
 
 // Minimal account endpoints for login to set cookies outside the Blazor circuit
 app.MapPost("/account/login", async (HttpContext http, Microsoft.AspNetCore.Identity.UserManager<SmartOps.Infrastructure.Data.ApplicationUser> userManager, Microsoft.AspNetCore.Identity.SignInManager<SmartOps.Infrastructure.Data.ApplicationUser> signInManager) =>
@@ -519,7 +498,8 @@ app.MapPost("/account/login", async (HttpContext http, Microsoft.AspNetCore.Iden
     }
     catch (Exception ex)
     {
-        Console.Error.WriteLine($"Account login endpoint error: {ex}");
+        // Never log the request body (it carries the password).
+        Console.Error.WriteLine($"Account login endpoint error: {ex.GetType().Name}: {ex.Message}");
         return Results.StatusCode(500);
     }
 }).WithMetadata(new Microsoft.AspNetCore.Mvc.IgnoreAntiforgeryTokenAttribute());
