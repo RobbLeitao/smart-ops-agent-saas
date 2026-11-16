@@ -183,10 +183,8 @@ namespace SmartOps.Web.Services
         {
             if (userPrompt is null) throw new ArgumentNullException(nameof(userPrompt));
 
-            var settings = new PromptExecutionSettings
-            {
-                FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
-            };
+            // No FunctionChoiceBehavior: no functions are registered on any Kernel.
+            var settings = new PromptExecutionSettings();
 
             var integration = ReadIntegrationSettings();
             if (IsRealProvider(integration.Provider))

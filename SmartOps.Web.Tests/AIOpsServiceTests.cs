@@ -11,7 +11,7 @@ namespace SmartOps.Web.Tests;
 public sealed class AIOpsServiceTests
 {
     [Fact]
-    public async Task ExecutePromptAsync_ReturnsModelResponseAndEnablesAutoFunctionChoice()
+    public async Task ExecutePromptAsync_ReturnsModelResponseWithoutFunctionCalling()
     {
         var completionService = new RecordingChatCompletionService("SmartOps AI reply");
         var builder = Kernel.CreateBuilder();
@@ -22,11 +22,8 @@ public sealed class AIOpsServiceTests
         var result = await service.ExecutePromptAsync("Summarize the current incidents.");
 
         Assert.Equal("SmartOps AI reply", result);
-        Assert.NotNull(completionService.LastExecutionSettings);
-        Assert.NotNull(completionService.LastExecutionSettings!.FunctionChoiceBehavior);
-        Assert.Equal(
-            "AutoFunctionChoiceBehavior",
-            completionService.LastExecutionSettings.FunctionChoiceBehavior!.GetType().Name);
+        // No functions are registered anywhere: no FunctionChoiceBehavior is sent.
+        Assert.Null(completionService.LastExecutionSettings?.FunctionChoiceBehavior);
     }
 
     [Fact]

@@ -29,41 +29,31 @@ public sealed class DiagnosticOrchestratorService
     }
 
     /// <summary>
-    /// Webhook entry point. The transaction is resolved in the database and analyzed with the v2 prompt, like the
-    /// Drawer. Only when it is not found (or there is no database) the legacy prompt is used, which asks the model
-    /// to look it up through DataOpsPlugin.
+    /// Webhook entry point: resolves the transaction in the database and analyzes it with the v2 prompt, like the Drawer.
     /// </summary>
+    /// <exception cref="TransactionNotFoundException">The transaction is not in the database (or there is none).</exception>
     public async Task<string> RunDiagnosticAsync(Guid transactionId)
     {
+        SmartOps.Core.Entities.Transaction? tx = null;
         if (_db != null)
         {
-            var txs = await _db.Transactions.ToListAsync();
-            var tx = txs.FirstOrDefault(t => CreateDeterministicGuidForInt(t.Id) == transactionId);
-            if (tx != null)
+            try
             {
-                return await RunCoreAsync(tx, createdByUserId: null);
+                var txs = await _db.Transactions.ToListAsync();
+                tx = txs.FirstOrDefault(t => CreateDeterministicGuidForInt(t.Id) == transactionId);
+            }
+            catch (Exception ex)
+            {
+                throw Unexpected(ex, null);
             }
         }
 
-        var sb = new StringBuilder();
-        sb.AppendLine("SYSTEM: Eres un Agente de Soporte Técnico experto en FinTech y APIs de Stripe.");
-        sb.AppendLine("Usa el plugin de datos para obtener los detalles de la transacción fallida usando el transactionId proporcionado.");
-        sb.AppendLine("Analiza el código de error devuelto por Stripe y genera una respuesta estructurada en Markdown con las secciones solicitadas.");
-        sb.AppendLine();
-        sb.AppendLine($"TransactionId: {transactionId}");
+        if (tx == null)
+        {
+            throw new TransactionNotFoundException();
+        }
 
-        try
-        {
-            return await _aiOps.ExecutePromptAsync(sb.ToString());
-        }
-        catch (AiEngineException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            throw Unexpected(ex, null);
-        }
+        return await RunCoreAsync(tx, createdByUserId: null);
     }
 
     public Task<string> RunDiagnosticAsync(SmartOps.Core.Entities.Transaction tx)

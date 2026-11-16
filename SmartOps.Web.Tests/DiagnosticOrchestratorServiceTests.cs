@@ -23,21 +23,30 @@ public sealed class DiagnosticOrchestratorServiceTests
     }
 
     [Fact]
-    public async Task RunDiagnosticAsync_ReturnsStructuredMarkdown()
+    public async Task RunDiagnosticAsync_ByGuid_WithoutDatabase_ThrowsTransactionNotFound()
     {
-        var transactionId = Guid.NewGuid();
         var fake = new FakeAIOpsService();
         var svc = new SmartOps.Web.Services.DiagnosticOrchestratorService(fake);
 
-        var result = await svc.RunDiagnosticAsync(transactionId);
+        var ex = await Assert.ThrowsAsync<SmartOps.Web.Services.TransactionNotFoundException>(() => svc.RunDiagnosticAsync(Guid.NewGuid()));
 
-        // Ensure the orchestrator injected the transactionId into the prompt
-        Assert.NotNull(fake.LastPrompt);
-        Assert.Contains(transactionId.ToString(), fake.LastPrompt);
+        Assert.Equal("No se encontró la transacción indicada.", ex.Message);
+        Assert.Null(fake.LastPrompt); // el motor de IA no se invoca
+    }
 
-        Assert.Contains("## 🔍 Resumen del Error", result);
-        Assert.Contains("## 🛠️ Acciones Recomendadas para el Operador", result);
-        Assert.Contains("## 📨 Plantilla de Correo para el Cliente", result);
+    [Fact]
+    public async Task RunDiagnosticAsync_ByGuid_UnknownTransaction_ThrowsNotFoundWithoutPersisting()
+    {
+        var (db, _) = await CreateDbWithFailedTransactionAsync();
+        using var _db = db;
+        var fake = new FakeAIOpsService();
+        var svc = new SmartOps.Web.Services.DiagnosticOrchestratorService(fake, db);
+
+        var ex = await Assert.ThrowsAsync<SmartOps.Web.Services.TransactionNotFoundException>(() => svc.RunDiagnosticAsync(Guid.NewGuid()));
+
+        Assert.Equal("No se encontró la transacción indicada.", ex.Message);
+        Assert.Null(fake.LastPrompt);
+        Assert.Equal(0, await db.Diagnostics.CountAsync());
     }
 
     [Fact]
@@ -120,10 +129,14 @@ public sealed class DiagnosticOrchestratorServiceTests
     [Fact]
     public async Task RunDiagnosticAsync_ByGuid_AiEngineException_Propagates()
     {
-        var svc = new SmartOps.Web.Services.DiagnosticOrchestratorService(
-            new ThrowingAIOpsService(new SmartOps.Web.Services.AiEngineException("rate limit")));
+        var (db, tx) = await CreateDbWithFailedTransactionAsync();
+        using var _ = db;
+        var aiError = new SmartOps.Web.Services.AiEngineException("rate limit");
+        var svc = new SmartOps.Web.Services.DiagnosticOrchestratorService(new ThrowingAIOpsService(aiError), db);
 
-        await Assert.ThrowsAsync<SmartOps.Web.Services.AiEngineException>(() => svc.RunDiagnosticAsync(Guid.NewGuid()));
+        var ex = await Assert.ThrowsAsync<SmartOps.Web.Services.AiEngineException>(() => svc.RunDiagnosticAsync(DeterministicGuid(tx.Id)));
+        Assert.Same(aiError, ex);
+        Assert.Equal(0, await db.Diagnostics.CountAsync());
     }
 
     [Fact]

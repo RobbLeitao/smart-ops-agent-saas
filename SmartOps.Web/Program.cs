@@ -4,7 +4,6 @@ using SmartOps.Infrastructure.Data;
 using SmartOps.Web.Components;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
-using SmartOps.Web.Plugins;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -96,9 +95,9 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
     options.UseSqlite(connectionString);
 });
 
-// Defer Kernel construction to a factory so we can use the final IServiceProvider without calling BuildServiceProvider.
-// Register Kernel as a singleton using a factory that receives the application's IServiceProvider.
-builder.Services.AddSingleton<Kernel>(sp =>
+// Application Kernel: only the environment-configured provider (OPENAI_API_KEY), with no plugins. AIOpsService uses
+// it when /integrations has no real provider; without a chat service it falls back to the Local Simulator.
+builder.Services.AddSingleton<Kernel>(_ =>
 {
     var kb = Kernel.CreateBuilder();
 
@@ -108,63 +107,14 @@ builder.Services.AddSingleton<Kernel>(sp =>
         kb.AddOpenAIChatCompletion(Environment.GetEnvironmentVariable("OPENAI_API_KEY")!, null, modelId);
     }
 
-    try
-    {
-        var plugins = (System.Collections.Generic.ICollection<Microsoft.SemanticKernel.KernelPlugin>)kb.Plugins;
-        plugins.AddFromType<DataOpsPlugin>(null, sp);
-    }
-    catch
-    {
-        try
-        {
-            var plugins = (System.Collections.Generic.ICollection<Microsoft.SemanticKernel.KernelPlugin>)kb.Plugins;
-            plugins.AddFromType<DataOpsPlugin>();
-        }
-        catch
-        {
-        }
-    }
-
-    var builtKernel = kb.Build();
-
-    try
-    {
-        var kernelType = builtKernel.GetType();
-        var regMethod = kernelType.GetMethod("RegisterNativeFunction")
-                        ?? kernelType.GetMethod("RegisterFunction")
-                        ?? kernelType.GetMethod("AddFunction")
-                        ?? kernelType.GetMethod("RegisterSemanticFunction");
-
-        if (regMethod != null)
-        {
-            System.Func<System.Threading.Tasks.Task<string>> del = async () =>
-            {
-                var plugin = sp.GetService<DataOpsPlugin>() ?? ActivatorUtilities.CreateInstance<DataOpsPlugin>(sp);
-                return await plugin.GetFailedTransactionsAsync();
-            };
-
-            try
-            {
-                regMethod.Invoke(builtKernel, new object[] { "DataOps.GetFailedTransactions", del });
-            }
-            catch
-            {
-            }
-        }
-    }
-    catch
-    {
-    }
-
-    return builtKernel;
+    return kb.Build();
 });
 
-// Register AIOpsService, DiagnosticOrchestratorService and plugin in DI.
+// Register AIOpsService and DiagnosticOrchestratorService in DI.
 // The factory builds the OpenAI / Azure OpenAI connector from the provider persisted in /integrations.
 builder.Services.AddSingleton<SmartOps.Web.Services.IChatCompletionServiceFactory, SmartOps.Web.Services.SemanticKernelChatCompletionServiceFactory>();
 builder.Services.AddScoped<SmartOps.Web.Services.AIOpsService>();
 builder.Services.AddScoped<SmartOps.Web.Services.IAIOpsService>(sp => sp.GetRequiredService<SmartOps.Web.Services.AIOpsService>());
-builder.Services.AddScoped<DataOpsPlugin>();
 builder.Services.AddScoped<SmartOps.Web.Services.DiagnosticOrchestratorService>();
 builder.Services.AddScoped<SmartOps.Web.Services.DashboardHeaderActionsService>();
 
@@ -569,13 +519,18 @@ app.MapPost("/api/webhooks/stripe/{transactionId?}", async (HttpRequest req, str
     {
         result = await orchestrator.RunDiagnosticAsync(txId.Value);
     }
+    catch (SmartOps.Web.Services.TransactionNotFoundException notFound)
+    {
+        // The transaction is not in the database: nothing to analyze, nothing persisted.
+        return Results.Text(notFound.Message, "text/plain; charset=utf-8", statusCode: StatusCodes.Status404NotFound);
+    }
     catch (SmartOps.Web.Services.AiEngineException aiEx)
     {
         // The configured AI provider (upstream) failed: 502 Bad Gateway with the operator-facing message.
         return Results.Text(aiEx.Message, "text/plain; charset=utf-8", statusCode: StatusCodes.Status502BadGateway);
     }
 
-    if (string.IsNullOrWhiteSpace(result) || result.Contains("NotFound", StringComparison.OrdinalIgnoreCase) || result.Contains("No failed", StringComparison.OrdinalIgnoreCase))
+    if (string.IsNullOrWhiteSpace(result))
     {
         return Results.NotFound();
     }
