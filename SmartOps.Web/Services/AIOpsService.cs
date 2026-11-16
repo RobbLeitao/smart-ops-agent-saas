@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 
 namespace SmartOps.Web.Services
 {
@@ -21,6 +22,22 @@ namespace SmartOps.Web.Services
         /// is operator-facing and safe to show in the UI.
         /// </exception>
         Task<string> ExecutePromptAsync(string userPrompt);
+
+        /// <summary>
+        /// Diagnostic with the v2 contract: system + user messages sent as a ChatHistory (no SK prompt template, no
+        /// function calling), or the Local Simulator when no AI provider is configured. Same provider selection and
+        /// <see cref="AiEngineException"/> mapping as <see cref="ExecutePromptAsync"/>.
+        /// </summary>
+        /// <exception cref="AiEngineException">
+        /// Provider failure, or a response that is empty / lacks the three diagnostic sections
+        /// (<see cref="AIOpsService.IncompleteResponseMessage"/>).
+        /// </exception>
+        /// <remarks>
+        /// Default implementation for test doubles that only implement <see cref="ExecutePromptAsync"/>: sends both
+        /// messages as one prompt and reports no prompt version.
+        /// </remarks>
+        async Task<AiDiagnosticResult> ExecuteDiagnosticAsync(DiagnosticPrompt prompt)
+            => new(await ExecutePromptAsync(prompt.System + "\n\n" + prompt.User), null);
     }
 
     /// <summary>
@@ -37,6 +54,17 @@ namespace SmartOps.Web.Services
     {
         private const string DefaultModelId = "gpt-4o";
 
+        public const string IncompleteResponseMessage = "El modelo devolvió una respuesta incompleta. Probá de nuevo.";
+
+        /// <summary>Low temperature: the diagnostic must follow a fixed format.</summary>
+        public const double DiagnosticTemperature = 0.2;
+
+        /// <summary>
+        /// Output budget for the diagnostic. Reasoning models (gpt-oss, o-series) count their hidden reasoning against
+        /// it, so it is well above the ~400 tokens the visible answer needs.
+        /// </summary>
+        public const int DiagnosticMaxTokens = 4096;
+
         // Artificial "thinking" delay applied only to the Local Simulator path below, so the AI diagnostic
         // feels like real background work and callers' loading UI (e.g. TransactionDetailDrawer's loader)
         // has time to be perceived. Real provider calls are never delayed here.
@@ -45,15 +73,110 @@ namespace SmartOps.Web.Services
         private readonly Kernel _kernel;
         private readonly SmartOps.Infrastructure.Data.AppDbContext? _db;
         private readonly IChatCompletionServiceFactory _chatFactory;
+        private readonly TimeSpan _simulatedDelay;
 
         public AIOpsService(
             Kernel kernel,
             SmartOps.Infrastructure.Data.AppDbContext? db = null,
             IChatCompletionServiceFactory? chatFactory = null)
+            : this(kernel, db, chatFactory, SimulatedThinkingDelay)
+        {
+        }
+
+        /// <param name="simulatedDelay">Local Simulator delay; tests pass <see cref="TimeSpan.Zero"/>.</param>
+        public AIOpsService(
+            Kernel kernel,
+            SmartOps.Infrastructure.Data.AppDbContext? db,
+            IChatCompletionServiceFactory? chatFactory,
+            TimeSpan simulatedDelay)
         {
             _kernel = kernel ?? throw new ArgumentNullException(nameof(kernel));
             _db = db;
             _chatFactory = chatFactory ?? new SemanticKernelChatCompletionServiceFactory();
+            _simulatedDelay = simulatedDelay;
+        }
+
+        public async Task<AiDiagnosticResult> ExecuteDiagnosticAsync(DiagnosticPrompt prompt)
+        {
+            if (prompt is null) throw new ArgumentNullException(nameof(prompt));
+
+            var history = new ChatHistory();
+            history.AddSystemMessage(prompt.System);
+            history.AddUserMessage(prompt.User);
+
+            // No FunctionChoiceBehavior: the transaction data is already in the user message.
+            var settings = new OpenAIPromptExecutionSettings
+            {
+                Temperature = DiagnosticTemperature,
+                MaxTokens = DiagnosticMaxTokens
+            };
+
+            var integration = ReadIntegrationSettings();
+            string? content;
+            if (IsRealProvider(integration.Provider))
+            {
+                var chat = CreateConfiguredChatService(integration);
+                content = await CompleteAndMapErrorsAsync(chat, history, settings, integration.ModelId, integration.ApiKey);
+            }
+            else
+            {
+                var chat = _kernel.Services.GetService<IChatCompletionService>();
+                if (chat is null)
+                {
+                    // No AI provider configured at all: Local Simulator (same contract as the v2 prompt).
+                    await Task.Delay(_simulatedDelay);
+                    return LocalDiagnosticSimulator.Build(prompt);
+                }
+
+                content = await CompleteAndMapErrorsAsync(chat, history, settings, null, null);
+            }
+
+            return new AiDiagnosticResult(EnsureCompleteDiagnostic(content), prompt.Version);
+        }
+
+        /// <summary>
+        /// Empty answers or answers without the three sections are an operator-facing error, never a Diagnostic.
+        /// An outer ```markdown fence is removed before storing (the parser still removes it for older rows).
+        /// </summary>
+        public static string EnsureCompleteDiagnostic(string? content)
+        {
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                throw new AiEngineException(IncompleteResponseMessage);
+            }
+
+            // Some models write «US$ 24,00» with a no-break / narrow no-break space: normalize to a plain space so
+            // the stored text matches the amount format exactly.
+            var markdown = SuggestedMessageExtractor.UnwrapOuterFence(content)
+                .Replace('\u00A0', ' ').Replace('\u202F', ' ').Replace('\u2007', ' ')
+                .Trim();
+            var sections = DiagnosticSectionParser.Parse(markdown);
+            if (string.IsNullOrWhiteSpace(sections.WhatHappened)
+                || string.IsNullOrWhiteSpace(sections.WhatToDo)
+                || string.IsNullOrWhiteSpace(sections.CustomerMessage))
+            {
+                throw new AiEngineException(IncompleteResponseMessage);
+            }
+
+            return markdown;
+        }
+
+        private static async Task<string?> CompleteAndMapErrorsAsync(
+            IChatCompletionService chat,
+            ChatHistory history,
+            PromptExecutionSettings settings,
+            string? modelId,
+            string? apiKey)
+        {
+            try
+            {
+                var message = await chat.GetChatMessageContentAsync(history, settings);
+                return message.Content;
+            }
+            catch (Exception ex)
+            {
+                throw MapToAiEngineException(ex, modelId, apiKey);
+            }
         }
 
         public async Task<string> ExecutePromptAsync(string userPrompt)
@@ -79,31 +202,9 @@ namespace SmartOps.Web.Services
             string userPrompt,
             PromptExecutionSettings settings)
         {
-            if (string.IsNullOrWhiteSpace(integration.ApiKey))
-            {
-                throw new AiEngineException(
-                    "No hay una API Key configurada en /integrations para el proveedor de IA seleccionado.");
-            }
-
-            Kernel providerKernel;
-            try
-            {
-                var chatService = _chatFactory.Create(
-                    integration.Provider!,
-                    integration.ApiKey,
-                    integration.ModelId,
-                    integration.Endpoint);
-
-                var builder = Kernel.CreateBuilder();
-                builder.Services.AddSingleton<IChatCompletionService>(chatService);
-                providerKernel = builder.Build();
-            }
-            catch (Exception ex)
-            {
-                throw new AiEngineException(
-                    "No se pudo inicializar el conector de IA. Verificá el proveedor, el Model ID y (si aplica) el endpoint configurados en /integrations.",
-                    ex);
-            }
+            var builder = Kernel.CreateBuilder();
+            builder.Services.AddSingleton<IChatCompletionService>(CreateConfiguredChatService(integration));
+            var providerKernel = builder.Build();
 
             var content = await InvokeAndMapErrorsAsync(providerKernel, userPrompt, settings, integration.ModelId, integration.ApiKey);
             if (string.IsNullOrWhiteSpace(content))
@@ -112,6 +213,31 @@ namespace SmartOps.Web.Services
             }
 
             return content;
+        }
+
+        /// <summary>Connector for the provider persisted in /integrations (shared by both entry points).</summary>
+        private IChatCompletionService CreateConfiguredChatService(IntegrationSettings integration)
+        {
+            if (string.IsNullOrWhiteSpace(integration.ApiKey))
+            {
+                throw new AiEngineException(
+                    "No hay una API Key configurada en /integrations para el proveedor de IA seleccionado.");
+            }
+
+            try
+            {
+                return _chatFactory.Create(
+                    integration.Provider!,
+                    integration.ApiKey,
+                    integration.ModelId,
+                    integration.Endpoint);
+            }
+            catch (Exception ex)
+            {
+                throw new AiEngineException(
+                    "No se pudo inicializar el conector de IA. Verificá el proveedor, el Model ID y (si aplica) el endpoint configurados en /integrations.",
+                    ex);
+            }
         }
 
         private async Task<string> ExecuteWithDefaultKernelAsync(string userPrompt, PromptExecutionSettings settings)
@@ -125,7 +251,7 @@ namespace SmartOps.Web.Services
             {
                 // No AI provider configured at all (no persisted real provider and no chat completion service on
                 // the application Kernel): Local Simulator.
-                await Task.Delay(SimulatedThinkingDelay);
+                await Task.Delay(_simulatedDelay);
                 return BuildSimulatedDiagnostic(userPrompt);
             }
             catch (Exception ex)
@@ -186,7 +312,8 @@ namespace SmartOps.Web.Services
             }
         }
 
-        // Local Simulator: heuristic diagnosis based on the "ErrorMessage:" line of the prompt.
+        // Legacy Local Simulator for ExecutePromptAsync (v1 format, parsed from the "ErrorMessage:" line). The
+        // diagnostic flow uses LocalDiagnosticSimulator (v2 contract) through ExecuteDiagnosticAsync.
         private static string BuildSimulatedDiagnostic(string userPrompt)
         {
             string? errorLine = null;

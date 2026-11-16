@@ -17,6 +17,11 @@
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Prompts versionados: se leen como recurso embebido (DiagnosticPromptBuilder). -->
+    <EmbeddedResource Include="Prompts\diagnostic.v2.md" LogicalName="SmartOps.Web.Prompts.diagnostic.v2.md" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>

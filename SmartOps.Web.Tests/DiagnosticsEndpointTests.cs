@@ -37,7 +37,10 @@ namespace SmartOps.Web.Tests
                         services.AddScoped<SmartOps.Web.Services.IAIOpsService, FakeAIOpsService>();
 
                         // Remove existing AppDbContext registrations (Sqlite) so we can replace with InMemory for tests
-                        var descriptors = services.Where(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>) || d.ServiceType == typeof(AppDbContext)).ToList();
+                        // EF Core 9 also keeps the Sqlite configuration in IDbContextOptionsConfiguration<AppDbContext>.
+                        var descriptors = services.Where(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>)
+                            || d.ServiceType == typeof(AppDbContext)
+                            || d.ServiceType == typeof(Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration<AppDbContext>)).ToList();
                         foreach (var d in descriptors) services.Remove(d);
 
                         // Use in-memory DB for testing
@@ -97,7 +100,10 @@ namespace SmartOps.Web.Tests
                     {
                         services.AddScoped<SmartOps.Web.Services.IAIOpsService, FailingAIOpsService>();
 
-                        var descriptors = services.Where(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>) || d.ServiceType == typeof(AppDbContext)).ToList();
+                        // EF Core 9 also keeps the Sqlite configuration in IDbContextOptionsConfiguration<AppDbContext>.
+                        var descriptors = services.Where(d => d.ServiceType == typeof(DbContextOptions<AppDbContext>)
+                            || d.ServiceType == typeof(AppDbContext)
+                            || d.ServiceType == typeof(Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration<AppDbContext>)).ToList();
                         foreach (var d in descriptors) services.Remove(d);
 
                         services.AddDbContext<AppDbContext>(options =>

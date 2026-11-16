@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using SmartOps.Core.Entities;
@@ -126,16 +127,40 @@ public sealed class DiagnosticOrchestratorServiceTests
     }
 
     [Fact]
-    public async Task RunDiagnosticAsync_NonAiException_KeepsExistingFallbackWithoutPersisting()
+    public async Task RunDiagnosticAsync_NonAiException_BecomesAiEngineExceptionWithoutPersisting()
     {
         var (db, tx) = await CreateDbWithFailedTransactionAsync();
         using var _ = db;
         var svc = new SmartOps.Web.Services.DiagnosticOrchestratorService(
-            new ThrowingAIOpsService(new InvalidOperationException("unexpected")), db);
+            new ThrowingAIOpsService(new InvalidOperationException("unexpected 4242")), db);
 
-        var result = await svc.RunDiagnosticAsync(tx);
+        var ex = await Assert.ThrowsAsync<SmartOps.Web.Services.AiEngineException>(() => svc.RunDiagnosticAsync(tx, "user-1"));
 
-        Assert.Contains("No se pudo ejecutar el proveedor de IA", result);
+        Assert.Equal("Ocurrió un error inesperado al generar el diagnóstico. Probá de nuevo.", ex.Message);
+        Assert.Null(ex.InnerException); // el mensaje original no viaja a la UI
         Assert.Equal(0, await db.Diagnostics.CountAsync());
+    }
+
+    [Fact]
+    public async Task RunDiagnosticAsync_ByGuid_ResolvesTransactionAndUsesPromptV2()
+    {
+        var (db, tx) = await CreateDbWithFailedTransactionAsync();
+        using var _ = db;
+        var fake = new FakeAIOpsService();
+        var svc = new SmartOps.Web.Services.DiagnosticOrchestratorService(fake, db);
+
+        await svc.RunDiagnosticAsync(DeterministicGuid(tx.Id));
+
+        Assert.Contains("<transaccion>", fake.LastPrompt);
+        Assert.Contains("Motivo del procesador: Card declined", fake.LastPrompt);
+        Assert.Equal(1, await db.Diagnostics.CountAsync());
+    }
+
+    private static Guid DeterministicGuid(int id)
+    {
+        var ns = System.Text.Encoding.UTF8.GetBytes("SmartOps.Transaction.IntMapping");
+        using var md5 = System.Security.Cryptography.MD5.Create();
+        var hash = md5.ComputeHash(ns.Concat(System.Text.Encoding.UTF8.GetBytes(id.ToString())).ToArray());
+        return new Guid(hash.Take(16).ToArray());
     }
 }

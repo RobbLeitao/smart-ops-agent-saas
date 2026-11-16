@@ -27,5 +27,9 @@ namespace SmartOps.Core.Entities
 
         // ID of the user who created the diagnostic
         public string? CreatedByUserId { get; set; }
+
+        // Version of the prompt / engine that produced the Markdown: "v2" (LLM, Prompts/diagnostic.v2.md),
+        // "sim-v2" (Local Simulator). Null = diagnostics created before versioning ("v1").
+        public string? PromptVersion { get; set; }
     }
 }

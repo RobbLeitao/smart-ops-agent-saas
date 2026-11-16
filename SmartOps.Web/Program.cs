@@ -297,6 +297,7 @@ using (var scope = app.Services.CreateScope())
         Program.EnsureColumnExists(db, "Diagnostics", "IsUseful", "INTEGER");
         Program.EnsureColumnExists(db, "Diagnostics", "UserId", "TEXT");
         Program.EnsureColumnExists(db, "Diagnostics", "CreatedByUserId", "TEXT");
+        Program.EnsureColumnExists(db, "Diagnostics", "PromptVersion", "TEXT");
         Program.BackfillTransactionCards(db);
         Program.SeedDemoTransactionsAndDiagnostics(db);
 
