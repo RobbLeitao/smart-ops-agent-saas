@@ -26,3 +26,5 @@ Siguientes pasos sugeridos
 - Reemplazar la lógica reflectiva por llamadas directas a la API oficial de Semantic Kernel cuando se actualice el paquete y se confirme la API de registro de funciones.
 - Añadir más funciones/argumentos al plugin (filtros por fecha, paginación, etc.) según necesidades del agente.
 - Considerar migraciones EF Core para aplicar cambios del modelo en entornos reales.
+
+> **Nota (2026-11-16):** `DataOpsPlugin`, su `KernelFunctionAttribute` propio y el uso de `FunctionChoiceBehavior.Auto()` se eliminaron (PR #14). El diagnóstico v2 recibe los datos de la transacción en el prompt y no usa function calling. Este changelog queda como registro histórico.

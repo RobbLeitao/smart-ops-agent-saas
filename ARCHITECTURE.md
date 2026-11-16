@@ -27,7 +27,7 @@ Mapeo descriptivo del código en `feature/ui-notifications-and-loader` (HEAD `a9
 |---|---|---|
 | `SmartOps.Core` | — | Entidades POCO (`Entities/`), el contrato de eventos `ITransactionPublisher` (`SmartOps.Core/ITransactionPublisher.cs`, namespace `SmartOps.Core.Interfaces`) y `TransactionEventArgs` (`SmartOps.Core/TransactionEventArgs.cs`, namespace `SmartOps.Core.Events`). No tiene dependencias NuGet. |
 | `SmartOps.Infrastructure` | Core | `AppDbContext` (Identity + entidades), `ApplicationUser`, las migraciones EF, el generador de transacciones `SimulatorTransactionService` (BackgroundService) y `NoopTransactionPublisher`. |
-| `SmartOps.Web` | Infrastructure | El host ASP.NET Core: Blazor Server, SignalR hub, los servicios de IA (Semantic Kernel), el plugin `DataOpsPlugin`, los endpoints mínimos (login/logout/webhook/debug) y los assets estáticos. |
+| `SmartOps.Web` | Infrastructure | El host ASP.NET Core: Blazor Server, SignalR hub, los servicios de IA (Semantic Kernel), los endpoints mínimos (login/logout/webhook/debug) y los assets estáticos. |
 | `SmartOps.Web.Tests` | Web, Infrastructure | Tests xUnit, bUnit e integración con `WebApplicationFactory<Program>`. |
 
 ### Fuera de la solución (versionados en el repo)
@@ -164,26 +164,19 @@ La UI usa el camino B.
 ### B. Camino usado por la UI
 
 - `DiagnosticOrchestratorService` (`Services/DiagnosticOrchestratorService.cs`, scoped):
-  - `RunDiagnosticAsync(Transaction)`: arma un prompt con los campos de la transacción, llama `IAIOpsService.ExecutePromptAsync` y persiste un `Diagnostic` (exige `CardLast4`; si falta, lanza).
-  - `RunDiagnosticAsync(Transaction, string? createdByUserId)`: hace lo mismo y después asigna `CreatedByUserId` al último diagnóstico de esa transacción.
-  - `RunDiagnosticAsync(Guid)`: prompt con `TransactionId` para function calling. Para persistir, busca la transacción mapeando `int Id → Guid` con MD5 (`CreateDeterministicGuidForInt`).
-  - Ante una excepción devuelve un Markdown de fallback.
-- `AIOpsService : IAIOpsService` (`Services/AIOpsService.cs`, scoped). Usa `FunctionChoiceBehavior.Auto()`. El orden de resolución es:
-  1. Lee `Settings`. Si `Integrations.Provider == "OpenAI"` y hay `ApiKey`, construye un Kernel temporal con `AddOpenAIChatCompletion(key, model)` y llama `InvokePromptAsync`. Si falla, sigue al paso 2.
-  2. Llama al `Kernel` singleton inyectado.
-  3. Si la excepción contiene `"No service was found"`, entra en el **simulador local** del propio `AIOpsService`: espera `SimulatedThinkingDelay` (1800 ms) y aplica una heurística sobre la línea `ErrorMessage:` del prompt.
-  4. Cualquier otra excepción se devuelve como string `"Error executing AI prompt: ..."`.
-- Kernel singleton (`Program.cs:106–165`):
-  - Agrega OpenAI solo si existe la variable de entorno `OPENAI_API_KEY` (modelo `OPENAI_MODEL_ID` o `gpt-4o`).
-  - Registra `DataOpsPlugin` con `kb.Plugins.AddFromType<DataOpsPlugin>(null, sp)`.
-  - Por reflexión intenta registrar `DataOps.GetFailedTransactions` buscando métodos `RegisterNativeFunction`/`RegisterFunction`/`AddFunction`.
+  - `RunDiagnosticAsync(Transaction[, createdByUserId])`: arma el prompt v2 con `DiagnosticPromptBuilder` (`Prompts/diagnostic.v2.md`, recurso embebido), llama `IAIOpsService.ExecuteDiagnosticAsync` y persiste un `Diagnostic` con `PromptVersion` y `CreatedByUserId` (exige `CardLast4`).
+  - `RunDiagnosticAsync(Guid)` (webhook): busca la transacción mapeando `int Id → Guid` con MD5 (`CreateDeterministicGuidForInt`) y sigue igual que arriba. Si no existe lanza `TransactionNotFoundException` («No se encontró la transacción indicada.»), que el webhook responde con 404.
+  - Los errores del proveedor (`AiEngineException`) se propagan; cualquier otra excepción se loguea (tipo y stack, sin mensaje) y se convierte en `AiEngineException` genérica. Nunca se persiste un diagnóstico ante un error.
+- `AIOpsService : IAIOpsService` (`Services/AIOpsService.cs`, scoped). Sin function calling: ningún Kernel tiene funciones registradas.
+  - `ExecuteDiagnosticAsync(DiagnosticPrompt)`: `ChatHistory` system + user, `Temperature = 0.2`, `MaxTokens = 4096`. Si `/integrations` tiene un proveedor real, usa el conector de `IChatCompletionServiceFactory`; si no, el servicio de chat del Kernel singleton; si tampoco hay, el **Simulador local** (`LocalDiagnosticSimulator`, `PromptVersion = "sim-v2"`). Una respuesta vacía o sin las 3 secciones es `AiEngineException` («respuesta incompleta»).
+  - `ExecutePromptAsync(string)`: camino anterior (un solo prompt por `InvokePromptAsync`), con el mismo orden de resolución y el simulador v1. Lo usa la implementación por defecto de `ExecuteDiagnosticAsync` en los dobles de test.
+  - Los errores de proveedor se mapean con `AiEngineErrorMapper`.
+- Kernel singleton (`Program.cs`): agrega OpenAI solo si existe la variable de entorno `OPENAI_API_KEY` (modelo `OPENAI_MODEL_ID` o `gpt-4o`). No registra plugins.
 - Configuración `AI:*` (`Program.cs:12–54`):
   - Lee `AI:Provider/ApiKey/Model/Endpoint` o las variables `AI_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_MODEL_ID` y `AZURE_OPENAI_ENDPOINT`, y configura un `skBuilder` local. Ese builder no se construye ni se registra.
   - Si no hay key, registra `DevFakeKernelAdapter` (`Services/DevFakeKernelAdapter.cs`, implementa `IChatCompletionService` + `ITextGenerationService`) en el DI de la app.
 - Otros fakes:
   - `DevFakeChatCompletionService` (`Services/DevFakeChatCompletionService.cs`): `IChatCompletionService` con una respuesta estática. No se registra en `Program.cs`.
-- Plugin `DataOpsPlugin` (`SmartOps.Web/Plugins/DataOpsPlugin.cs`, scoped): `GetFailedTransactionsAsync()` devuelve las transacciones `Status=="Failed" && Provider=="Stripe"` formateadas.
-  - El atributo `[KernelFunction]` que usa es uno propio, definido en `SmartOps.Web/Plugins/KernelFunctionAttribute.cs` (namespace `Microsoft.SemanticKernel.SkillDefinition`), no el de SK 1.x.
 
 ### Selección del proveedor en runtime (resumen)
 
@@ -216,7 +209,7 @@ Endpoints HTTP mínimos (`Program.cs`):
 
 - `POST /account/login`: JSON `{Email, Password}`. Hace `SignInAsync` y setea la cookie `smartops_transition` (30 s). Lleva `IgnoreAntiforgeryToken`.
 - `GET /account/logout`.
-- `POST /api/webhooks/stripe/{transactionId?}`: parsea un GUID de la URL o de `data.object.metadata.transactionId` / `data.object.id` y llama `DiagnosticOrchestratorService.RunDiagnosticAsync(Guid)`. Devuelve `text/markdown`.
+- `POST /api/webhooks/stripe/{transactionId?}`: parsea un GUID de la URL o de `data.object.metadata.transactionId` / `data.object.id` y llama `DiagnosticOrchestratorService.RunDiagnosticAsync(Guid)`. Devuelve `text/markdown`; 404 si la transacción no existe y 502 ante un error del proveedor de IA.
 - `POST /api/debug/click` y `GET /debug/diag` (diagnóstico de DI/suscriptores).
 
 ### Comportamiento por página
@@ -331,14 +324,10 @@ Hay un único proyecto: `SmartOps.Web.Tests` (xUnit), con 48 tests (`[Fact]`/`[T
 |---|---|---|---|
 | `AuthTests.cs` + `AuthTestFixture.cs` | 14 | `POST /account/login` (200/401/400) y acceso a `/`, `/diagnostics-history`, `/integrations` por anónimo, Operador y Auditor (redirecciones) | `WebApplicationFactory` + SQLite real |
 | `AzureOpenAiDiagnosticEngineTests.cs` | 4 | `AzureOpenAiDiagnosticEngine`: éxito, 401 → `AiEngineException`, timeout o error genérico, sin API key | SQLite in-memory + factory y chat services fake |
-| `AIOpsServiceTests.cs` | 2 | `AIOpsService` devuelve la respuesta del modelo con `FunctionChoiceBehavior.Auto` y se resuelve en DI | fake `IChatCompletionService`, `WebApplicationFactory` |
+| `AIOpsServiceTests.cs` | 2 | `AIOpsService` devuelve la respuesta del modelo sin function calling y se resuelve en DI | fake `IChatCompletionService`, `WebApplicationFactory` |
 | `AIOpsServiceFallbackTests.cs` | 1 | Fallback simulado de `AIOpsService` sin servicio en el Kernel | — |
-| `AIOpsAutoFunctionInvokeTests.cs` | 1 | Settings de auto function choice | EF InMemory |
-| `AIOpsAutoFunctionInvokeE2ETests.cs` | 1 | El Kernel invoca la función registrada con transactionId | EF InMemory |
-| `AIOpsKernelPluginIntegrationTests.cs` | 1 | El Kernel tiene `DataOpsPlugin` accesible desde `AIOpsService` | `WebApplicationFactory` |
-| `DataOpsPluginTests.cs` | 1 | `GetFailedTransactionsAsync` formatea los fallos de Stripe | — |
 | `DiagnosticOrchestratorServiceTests.cs` | 2 | Markdown estructurado y persistencia de `CardLast4` | fake `IAIOpsService` |
-| `DiagnosticsEndpointTests.cs` | 1 | `POST /api/webhooks/stripe` devuelve Markdown | `WebApplicationFactory` + fake `IAIOpsService` |
+| `DiagnosticsEndpointTests.cs` | 3 | `POST /api/webhooks/stripe`: Markdown, 404 si la transacción no existe, 502 ante un error de IA | `WebApplicationFactory` + fake `IAIOpsService` |
 | `DiagnosticFeedbackPerUserTests.cs` | 3 | Votos por usuario, lectura del voto propio, índice único `(DiagnosticId, UserId)` | — |
 | `DiagnosticFeedbackPersistenceTests.cs` | 2 | Crear, leer y actualizar `IsUseful` | — |
 | `DiagnosticsHistoryRoleTests.cs` | 2 | El Operador ve solo los suyos; el Admin ve todos con el creador | — |
@@ -359,7 +348,7 @@ Sin tests directos para: `ProviderSwitchingTransactionAnalyzer`, `DevFakeTransac
 ## Notas abiertas
 
 1. **¿El Kernel singleton ve a `DevFakeKernelAdapter`?** El adapter se registra en el `IServiceCollection` de la app (`Program.cs:51–53`), pero el Kernel se arma con un `Kernel.CreateBuilder()` independiente (`Program.cs:108`), que tiene su propio contenedor. Leyendo el código, cuando no hay `OPENAI_API_KEY` el Kernel no tendría servicio de chat y `AIOpsService` caería en su simulador interno ("No service was found"), no en `DevFakeKernelAdapter`. Habría que confirmarlo ejecutando.
-2. **`[KernelFunction]` propio.** `DataOpsPlugin` usa el atributo definido en `Plugins/KernelFunctionAttribute.cs`, no `Microsoft.SemanticKernel.KernelFunctionAttribute`. No pude determinar sin ejecutar si `AddFromType<DataOpsPlugin>` expone la función (SK 1.x la descubre por su propio atributo). Existe un test que lo verifica (`AIOpsKernelPluginIntegrationTests`), pero no lo corrí.
+2. ~~**`[KernelFunction]` propio.**~~ Resuelto: `DataOpsPlugin` y su atributo se eliminaron (el diagnóstico v2 no usa function calling).
 3. **Qué migraciones están aplicadas en la base real.** Al arrancar se usa `EnsureCreated()`, que no registra `__EFMigrationsHistory`, y no hay ningún `Migrate()`. No puedo saber desde el código qué contiene `__EFMigrationsHistory` en `smartops.db`, ni si las migraciones se aplican con `dotnet ef` o con `tools/ApplyMigrationTool`.
 4. **`Diagnostic.UserId`, `Diagnostic.IsUseful`, `Summary`, `SuggestedMessage`.** Están en la entidad y en el esquema, pero no encontré código de producción que los escriba. `WasHelpful` sí se escribe, desde `DiagnosticsHistory.razor:381`. No queda claro cuáles son legado y cuáles están reservados para algo futuro.
 5. **README vs. código.** `README.md` describe ".NET 8 Blazor WebAssembly" y adapters llamados `DevFakeAdapter`/`OpenAiAdapter`. El código es net9.0 Blazor Interactive Server y las clases se llaman `DevFakeTransactionAnalyzer`/`AzureOpenAiDiagnosticEngine`. No sé si el README describe un plan o una versión anterior.

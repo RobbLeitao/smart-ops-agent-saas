@@ -1,123 +1,114 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace SmartOps.Web.Services;
 
 public sealed class DiagnosticOrchestratorService
 {
+    /// <summary>
+    /// Shown by the Drawer / webhook when something other than the AI provider fails. Deliberately not a diagnostic:
+    /// a fallback in the v2 format would look like a real answer.
+    /// </summary>
+    public const string UnexpectedErrorMessage = "Ocurrió un error inesperado al generar el diagnóstico. Probá de nuevo.";
+
     private readonly IAIOpsService _aiOps;
     private readonly SmartOps.Infrastructure.Data.AppDbContext? _db;
+    private readonly ILogger<DiagnosticOrchestratorService> _logger;
 
-    public DiagnosticOrchestratorService(IAIOpsService aiOps, SmartOps.Infrastructure.Data.AppDbContext? db = null)
+    public DiagnosticOrchestratorService(
+        IAIOpsService aiOps,
+        SmartOps.Infrastructure.Data.AppDbContext? db = null,
+        ILogger<DiagnosticOrchestratorService>? logger = null)
     {
         _aiOps = aiOps ?? throw new ArgumentNullException(nameof(aiOps));
         _db = db;
+        _logger = logger ?? NullLogger<DiagnosticOrchestratorService>.Instance;
     }
 
+    /// <summary>
+    /// Webhook entry point: resolves the transaction in the database and analyzes it with the v2 prompt, like the Drawer.
+    /// </summary>
+    /// <exception cref="TransactionNotFoundException">The transaction is not in the database (or there is none).</exception>
     public async Task<string> RunDiagnosticAsync(Guid transactionId)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("SYSTEM: Eres un Agente de Soporte Técnico experto en FinTech y APIs de Stripe.");
-        sb.AppendLine("Usa el plugin de datos para obtener los detalles de la transacción fallida usando el transactionId proporcionado.");
-        sb.AppendLine("Analiza el código de error devuelto por Stripe y genera una respuesta estructurada en Markdown con las secciones solicitadas.");
-        sb.AppendLine();
-        sb.AppendLine($"TransactionId: {transactionId}");
-
-        var prompt = sb.ToString();
-        try
+        SmartOps.Core.Entities.Transaction? tx = null;
+        if (_db != null)
         {
-            var response = await _aiOps.ExecutePromptAsync(prompt);
-
-            if (!string.IsNullOrWhiteSpace(response) && _db != null)
+            try
             {
                 var txs = await _db.Transactions.ToListAsync();
-                var tx = txs.FirstOrDefault(t => CreateDeterministicGuidForInt(t.Id) == transactionId);
-                if (tx != null)
-                {
-                    await PersistDiagnosticAsync(tx, response);
-                }
+                tx = txs.FirstOrDefault(t => CreateDeterministicGuidForInt(t.Id) == transactionId);
             }
+            catch (Exception ex)
+            {
+                throw Unexpected(ex, null);
+            }
+        }
 
-            return response;
-        }
-        catch (AiEngineException)
+        if (tx == null)
         {
-            // Operator-facing provider error: propagate to the caller (UI / webhook) without persisting a Diagnostic.
-            throw;
+            throw new TransactionNotFoundException();
         }
-        catch (Exception)
-        {
-            return "## 🔍 Resumen del Error\nNo se pudo ejecutar el proveedor de IA. Esto es una respuesta simulada para pruebas de UI.\n\n## 🛠️ Acciones Recomendadas para el Operador\n- Verificar configuración de AI (appsettings o variables de entorno).\n\n## 📨 Mensaje sugerido para el cliente\nEstimado cliente, estamos investigando su pago y le informaremos pronto.";
-        }
+
+        return await RunCoreAsync(tx, createdByUserId: null);
     }
 
-    public async Task<string> RunDiagnosticAsync(SmartOps.Core.Entities.Transaction tx)
+    public Task<string> RunDiagnosticAsync(SmartOps.Core.Entities.Transaction tx)
     {
         if (tx == null) throw new ArgumentNullException(nameof(tx));
+        return RunCoreAsync(tx, createdByUserId: null);
+    }
 
-        var sb = new StringBuilder();
-        sb.AppendLine("SYSTEM: Eres un Agente de Soporte Técnico experto en FinTech y APIs de Stripe.");
-        sb.AppendLine("Analiza la transacción fallida proporcionada y devuelve un diagnóstico estructurado en Markdown con: ");
-        sb.AppendLine("- Razón del fallo");
-        sb.AppendLine("- Acción recomendada para el operador");
-        sb.AppendLine("- Mensaje sugerido para enviar al cliente");
-        sb.AppendLine();
-        sb.AppendLine("---");
-        sb.AppendLine($"Id: {tx.Id}");
-        sb.AppendLine($"CustomerId: {tx.CustomerId}");
-        sb.AppendLine($"Amount: {tx.Amount} {tx.Currency}");
-        sb.AppendLine($"Provider: {tx.Provider}");
-        sb.AppendLine($"GatewayReference: {tx.GatewayReference}");
-        sb.AppendLine($"CardLast4: {tx.CardLast4}");
-        sb.AppendLine($"Status: {tx.Status}");
-        sb.AppendLine($"ErrorMessage: {tx.ErrorMessage}");
-        sb.AppendLine($"OccurredAt: {tx.OccurredAt:o}");
-        sb.AppendLine("---");
-        sb.AppendLine();
-        sb.AppendLine("Por favor responde únicamente con Markdown estructurado que contenga las tres secciones solicitadas.");
+    public Task<string> RunDiagnosticAsync(SmartOps.Core.Entities.Transaction tx, string? createdByUserId)
+    {
+        if (tx == null) throw new ArgumentNullException(nameof(tx));
+        return RunCoreAsync(tx, createdByUserId);
+    }
 
-        var prompt = sb.ToString();
+    /// <summary>
+    /// Prompt v2 → engine → Diagnostic row (with PromptVersion). Provider errors propagate as they are; anything else
+    /// is logged and becomes <see cref="UnexpectedErrorMessage"/>. A Diagnostic is persisted only on success.
+    /// </summary>
+    private async Task<string> RunCoreAsync(SmartOps.Core.Entities.Transaction tx, string? createdByUserId)
+    {
         try
         {
-            var response = await _aiOps.ExecutePromptAsync(prompt);
-            if (!string.IsNullOrWhiteSpace(response) && _db != null)
+            var prompt = DiagnosticPromptBuilder.Build(tx);
+            var result = await _aiOps.ExecuteDiagnosticAsync(prompt);
+
+            if (!string.IsNullOrWhiteSpace(result.Markdown) && _db != null)
             {
-                await PersistDiagnosticAsync(tx, response);
+                await PersistDiagnosticAsync(tx, result, createdByUserId);
             }
 
-            return response;
+            return result.Markdown;
         }
         catch (AiEngineException)
         {
             // Operator-facing provider error: propagate to the caller (UI / webhook) without persisting a Diagnostic.
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return "## 🔍 Resumen del Error\nNo se pudo ejecutar el proveedor de IA. Esto es una respuesta simulada para pruebas de UI.\n\n## 🛠️ Acciones Recomendadas para el Operador\n- Verificar configuración de AI (appsettings o variables de entorno).\n\n## 📨 Mensaje sugerido para el cliente\nEstimado cliente, estamos investigando su pago y le informaremos pronto.";
+            throw Unexpected(ex, tx.Id);
         }
     }
 
-    public async Task<string> RunDiagnosticAsync(SmartOps.Core.Entities.Transaction tx, string? createdByUserId)
+    // Only the exception type and stack trace are logged: messages can echo prompt data or provider responses.
+    private AiEngineException Unexpected(Exception ex, int? transactionId)
     {
-        if (tx == null) throw new ArgumentNullException(nameof(tx));
-
-        var response = await RunDiagnosticAsync(tx);
-        if (!string.IsNullOrWhiteSpace(response) && _db != null)
-        {
-            var latest = await _db.Diagnostics.OrderByDescending(d => d.CreatedAt).FirstOrDefaultAsync(d => d.TransactionId == tx.Id);
-            if (latest != null && latest.CreatedByUserId == null)
-            {
-                latest.CreatedByUserId = createdByUserId;
-                await _db.SaveChangesAsync();
-            }
-        }
-
-        return response;
+        _logger.LogError(
+            "Unexpected error generating diagnostic for transaction {TransactionId}: {ExceptionType}\n{StackTrace}",
+            transactionId?.ToString() ?? "(unknown)",
+            ex.GetType().FullName,
+            ex.StackTrace);
+        return new AiEngineException(UnexpectedErrorMessage);
     }
 
-    private async Task PersistDiagnosticAsync(SmartOps.Core.Entities.Transaction tx, string response, string? createdByUserId = null)
+    private async Task PersistDiagnosticAsync(SmartOps.Core.Entities.Transaction tx, AiDiagnosticResult result, string? createdByUserId)
     {
         if (string.IsNullOrWhiteSpace(tx.CardLast4))
         {
@@ -129,9 +120,10 @@ public sealed class DiagnosticOrchestratorService
             Id = Guid.NewGuid(),
             TransactionId = tx.Id,
             CreatedAt = DateTime.UtcNow,
-            Markdown = response,
+            Markdown = result.Markdown,
             CardLast4 = tx.CardLast4,
-            CreatedByUserId = createdByUserId
+            CreatedByUserId = createdByUserId,
+            PromptVersion = result.PromptVersion
         };
 
         _db!.Diagnostics.Add(diag);
